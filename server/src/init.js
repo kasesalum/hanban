@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import userRoutes from "./routes/user.js";
 import boardRoutes from "./routes/board.js";
 import searchRoutes from "./routes/search.js";
+import { startDeadlineNotifications } from "./deadlineNotifications.js";
 
 dotenv.config();
 
@@ -21,4 +22,5 @@ app.use("/api/search", searchRoutes);
 const port = process.env.PORT || 5050;
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
+  startDeadlineNotifications();
 });

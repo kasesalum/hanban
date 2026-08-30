@@ -7,6 +7,7 @@ import {
   assigneeLabel,
   type BoardLabel,
 } from "@/components/boards/boardCard";
+import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
 
 export type DetailCard = {
   id: string;
@@ -99,7 +100,26 @@ export default function CardDetailModal({
 
         <div>
           <p className="mb-1 text-sm text-gray-400">Deadline</p>
-          <p className="text-sm text-gray-200">{card.deadline || "None"}</p>
+          {card.deadline ? (
+            <div className="flex items-center gap-2">
+              <p
+                className={`text-sm ${
+                  isDeadlineOverdue(card.deadline, listId)
+                    ? "text-red-400"
+                    : "text-gray-200"
+                }`}
+              >
+                {card.deadline}
+              </p>
+              {isDeadlineOverdue(card.deadline, listId) && (
+                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-red-500 text-red-400 bg-red-500/15">
+                  Overdue
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-200">None</p>
+          )}
         </div>
 
         <div>

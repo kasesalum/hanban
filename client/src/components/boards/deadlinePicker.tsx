@@ -10,10 +10,19 @@ function toISODate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+export function todayISO() {
+  return toISODate(new Date());
+}
+
 export function tomorrowISO() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
   return toISODate(date);
+}
+
+export function isDeadlineOverdue(deadline?: string, listId?: string) {
+  if (!deadline || listId === "done") return false;
+  return deadline < todayISO();
 }
 
 function parseISO(value: string) {

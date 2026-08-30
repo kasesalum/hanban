@@ -9,6 +9,7 @@ import {
   withDefaultLabels,
   withDefaultLists,
 } from "../boardLists.js";
+import { notifyAssigneesAdded } from "../mailer.js";
 
 const router = express.Router();
 const algolia = algoliasearch(
@@ -82,6 +83,17 @@ router.post("/:id/cards", async (req, res) => {
 
     list.cards.push(card);
     await boardRef.set({ lists }, { merge: true });
+
+    if (assigneeIds.length > 0) {
+      notifyAssigneesAdded({
+        boardId,
+        boardName: boardData.name || "Untitled board",
+        urlName: boardData.urlName,
+        card,
+      }).catch((err) => {
+        console.error("Error sending assignee notification:", err);
+      });
+    }
 
     res.json({ card, lists });
   } catch (error) {

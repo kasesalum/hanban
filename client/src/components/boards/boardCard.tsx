@@ -1,5 +1,6 @@
 "use client";
 
+import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
 import { Star } from "lucide-react";
 
 export type BoardLabel = {
@@ -199,8 +200,16 @@ export default function BoardCard({
             <div className="flex flex-wrap gap-1">
               <LabelChip labelId={board.label} labels={labels} />
               {board.deadline && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-gray-300">
-                  {board.deadline}
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                    isDeadlineOverdue(board.deadline, listId)
+                      ? "border-red-500 text-red-400 bg-red-500/15"
+                      : "border-border text-gray-300"
+                  }`}
+                >
+                  {isDeadlineOverdue(board.deadline, listId)
+                    ? `Overdue ${board.deadline}`
+                    : board.deadline}
                 </span>
               )}
             </div>
