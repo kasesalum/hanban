@@ -1,0 +1,28 @@
+{
+  "dependencies": {
+    "algoliasearch": "^5.37.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "firebase": "^12.2.1",
+    "firebase-admin": "^13.5.0",
+    "nodemon": "^3.1.10"
+  },
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/init.js",
+  "scripts": {
+    "test": "jest",
+    "dev": "nodemon .",
+    "algolia:backfill": "node src/scripts/backfillAlgolia.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "jest": "^30.1.1",
+    "supertest": "^7.1.4"
+  }
+}

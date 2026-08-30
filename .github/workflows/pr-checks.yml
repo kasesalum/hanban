@@ -1,0 +1,34 @@
+name: PR Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  server-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: npm install
+      # Removed global nodemon installation
+
+      - name: Run server tests
+        run: npm test # Change to 'nodemon .' if you do not have tests, but tests are highly recommended
+
+  client-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: npm install
+      - name: Run client tests
+        run: npm test # Change to 'npm run dev' if you do not have tests, but tests are highly recommended
