@@ -1,40 +1,125 @@
 "use client";
 
+import BoardCard, {
+  DEFAULT_BOARD_LABELS,
+  LabelChip,
+  type BoardLabel,
+} from "@/components/boards/boardCard";
+import CardDetailModal, {
+  type DetailCard,
+} from "@/components/boards/cardDetailModal";
+import DeadlinePicker, { tomorrowISO } from "@/components/boards/deadlinePicker";
+import LabelsEditorModal from "@/components/boards/labelsEditorModal";
+import MembersModal from "@/components/boards/membersModal";
 import Sidebar from "@/components/navigation/sidebar";
 import { auth } from "@/lib/firebase";
-import { getBoardInfo } from "@/lib/helper";
+import {
+  addBoardMember,
+  createBoardCard,
+  getBoardInfo,
+  moveBoardCard,
+  removeBoardMember,
+  updateBoardLabels,
+} from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useState } from "react";
 
 interface BoardPageProps {
   boardId: string;
   boardName: string;
 }
 
+type TaskCard = {
+  id: string;
+  title: string;
+  description?: string;
+  assignees?: string[];
+  label?: string;
+  deadline?: string;
+};
+
+type BoardList = {
+  id: string;
+  title: string;
+  cards: TaskCard[];
+};
+
 type BoardInfo = {
   id: string;
   name?: string;
   urlName?: string;
   privacy?: string;
+  members?: string[];
+  ownerId?: string;
+  lists?: BoardList[];
+  labels?: BoardLabel[];
   background?: {
     type: "color" | "preset" | "upload";
     value: string;
   };
 };
 
-const EMPTY_COLUMNS = [
-  { id: "todo", title: "To Do" },
-  { id: "in-progress", title: "In Progress" },
-  { id: "done", title: "Done" },
+const EMPTY_COLUMNS: BoardList[] = [
+  { id: "todo", title: "To Do", cards: [] },
+  { id: "blocked", title: "Blocked", cards: [] },
+  { id: "in-progress", title: "In Progress", cards: [] },
+  { id: "done", title: "Done", cards: [] },
 ];
+
+function defaultForm() {
+  return {
+    title: "",
+    description: "",
+    assignees: [] as string[],
+    label: "",
+    deadline: tomorrowISO(),
+  };
+}
+
+function applyMove(
+  lists: BoardList[],
+  cardId: string,
+  listId: string
+): BoardList[] {
+  let moved: TaskCard | null = null;
+  const next = lists.map((list) => ({
+    ...list,
+    cards: (list.cards || []).filter((card) => {
+      if (card.id === cardId) {
+        moved = card;
+        return false;
+      }
+      return true;
+    }),
+  }));
+
+  if (!moved) return lists;
+  return next.map((list) =>
+    list.id === listId
+      ? { ...list, cards: [...list.cards, moved as TaskCard] }
+      : list
+  );
+}
 
 export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [board, setBoard] = useState<BoardInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [addingListId, setAddingListId] = useState<string | null>(null);
+  const [form, setForm] = useState(defaultForm);
+  const [saving, setSaving] = useState(false);
+  const [openCard, setOpenCard] = useState<{
+    card: DetailCard;
+    listId: string;
+  } | null>(null);
+  const [myTasksOnly, setMyTasksOnly] = useState(false);
+  const [labelFilter, setLabelFilter] = useState("");
+  const [dragOverList, setDragOverList] = useState<string | null>(null);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -65,8 +150,84 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     router.push("/login");
   };
 
+  const lists = board?.lists?.length ? board.lists : EMPTY_COLUMNS;
+  const boardLabels = board?.labels?.length ? board.labels : DEFAULT_BOARD_LABELS;
+  const members = board?.members || [];
   const userName = user?.displayName?.replace(/\s+/g, "") || "unknown";
   const title = board?.name || decodeURIComponent(boardName) || "Untitled Board";
+
+  const matchesFilters = (card: TaskCard) => {
+    if (myTasksOnly && user?.uid && !card.assignees?.includes(user.uid)) {
+      return false;
+    }
+    if (labelFilter && card.label !== labelFilter) return false;
+    return true;
+  };
+
+  const toggleAssignee = (uid: string) => {
+    setForm((prev) => ({
+      ...prev,
+      assignees: prev.assignees.includes(uid)
+        ? prev.assignees.filter((id) => id !== uid)
+        : [...prev.assignees, uid],
+    }));
+  };
+
+  const handleMove = async (cardId: string, listId: string) => {
+    const previous = lists;
+    const alreadyThere = previous.some(
+      (list) => list.id === listId && list.cards.some((card) => card.id === cardId)
+    );
+    if (alreadyThere) return;
+
+    const next = applyMove(previous, cardId, listId);
+    setBoard((prev) => (prev ? { ...prev, lists: next } : prev));
+    if (openCard?.card.id === cardId) {
+      setOpenCard((prev) => (prev ? { ...prev, listId } : prev));
+    }
+
+    const result = await moveBoardCard(boardId, cardId, listId);
+    if (!result) {
+      setBoard((prev) => (prev ? { ...prev, lists: previous } : prev));
+      return;
+    }
+    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+  };
+
+  const handleAddCard = async (event: FormEvent, listId: string) => {
+    event.preventDefault();
+    if (!form.title.trim() || saving) return;
+
+    setSaving(true);
+    const result = await createBoardCard(boardId, listId, {
+      title: form.title.trim(),
+      description: form.description.trim(),
+      assignees: form.assignees,
+      label: form.label,
+      deadline: form.deadline,
+    });
+    setSaving(false);
+
+    if (!result) return;
+
+    setBoard((prev) =>
+      prev ? { ...prev, lists: result.lists } : { id: boardId, lists: result.lists }
+    );
+    setForm(defaultForm());
+    setAddingListId(null);
+  };
+
+  const handleDragStart = (event: DragEvent, cardId: string) => {
+    event.dataTransfer.setData("text/plain", cardId);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDrop = (event: DragEvent, listId: string) => {
+    event.preventDefault();
+    setDragOverList(null);
+    const cardId = event.dataTransfer.getData("text/plain");
+    if (cardId) handleMove(cardId, listId);
+  };
 
   return (
     <div className="flex min-h-screen bg-background text-gray-100">
@@ -89,7 +250,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         )}
         <div className="absolute inset-0 bg-black/25" />
 
-        <header className="relative z-10 flex max-h-16 items-center justify-between px-8 py-4 border-b border-white/10 bg-black/25 backdrop-blur-sm w-full">
+        <header className="relative z-10 flex max-h-16 items-center justify-between gap-4 px-8 py-4 border-b border-white/10 bg-black/25 backdrop-blur-sm w-full">
           <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-2xl font-semibold truncate">{title}</h1>
             {board?.privacy && (
@@ -97,6 +258,42 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                 {board.privacy}
               </span>
             )}
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setLabelsOpen(true)}
+              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
+            >
+              Labels
+            </button>
+            <button
+              type="button"
+              onClick={() => setMembersOpen(true)}
+              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
+            >
+              Members
+            </button>
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input
+                type="checkbox"
+                checked={myTasksOnly}
+                onChange={(e) => setMyTasksOnly(e.target.checked)}
+              />
+              My tasks
+            </label>
+            <select
+              value={labelFilter}
+              onChange={(e) => setLabelFilter(e.target.value)}
+              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
+            >
+              <option value="">All labels</option>
+              {boardLabels.map((label) => (
+                <option key={label.id} value={label.id}>
+                  {label.name}
+                </option>
+              ))}
+            </select>
           </div>
         </header>
 
@@ -107,30 +304,235 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
             <p className="text-white/80">Board not found.</p>
           ) : (
             <div className="flex gap-4 h-full items-start">
-              {EMPTY_COLUMNS.map((column) => (
-                <section
-                  key={column.id}
-                  className="w-72 shrink-0 rounded-xl bg-background/90 border border-border shadow-md flex flex-col max-h-full"
-                >
-                  <h2 className="px-4 py-3 font-semibold text-gray-100">
-                    {column.title}
-                  </h2>
-                  <div className="px-4 pb-3 text-sm text-gray-400">
-                    No cards yet
-                  </div>
-                  <button
-                    type="button"
-                    className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
+              {lists.map((column) => {
+                const visibleCards = (column.cards || []).filter(matchesFilters);
+                return (
+                  <section
+                    key={column.id}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDragOverList(column.id);
+                    }}
+                    onDragLeave={() =>
+                      setDragOverList((prev) => (prev === column.id ? null : prev))
+                    }
+                    onDrop={(event) => handleDrop(event, column.id)}
+                    className={`w-80 shrink-0 rounded-xl bg-background/90 border shadow-md flex flex-col max-h-full ${
+                      dragOverList === column.id
+                        ? "border-indigo-400"
+                        : "border-border"
+                    }`}
                   >
-                    <Plus className="w-4 h-4" />
-                    Add a card
-                  </button>
-                </section>
-              ))}
+                    <h2 className="px-4 py-3 font-semibold text-gray-100">
+                      {column.title}
+                    </h2>
+                    <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
+                      {visibleCards.length === 0 &&
+                        addingListId !== column.id && (
+                          <p className="px-1 text-sm text-gray-400">
+                            No cards yet
+                          </p>
+                        )}
+                      {visibleCards.map((card) => (
+                        <div
+                          key={card.id}
+                          draggable
+                          onDragStart={(event) => handleDragStart(event, card.id)}
+                        >
+                          <BoardCard
+                            compact
+                            currentUserId={user?.uid}
+                            listId={column.id}
+                            onMove={(nextListId) =>
+                              handleMove(card.id, nextListId)
+                            }
+                            onOpen={() =>
+                              setOpenCard({ card, listId: column.id })
+                            }
+                            labels={boardLabels}
+                            board={{
+                              id: card.id,
+                              name: card.title,
+                              description: card.description,
+                              assignees: card.assignees,
+                              label: card.label,
+                              deadline: card.deadline,
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    {addingListId === column.id ? (
+                      <form
+                        onSubmit={(event) => handleAddCard(event, column.id)}
+                        className="mx-3 mb-3 p-3 rounded-lg bg-background-alt border border-border space-y-2 text-sm"
+                      >
+                        <input
+                          value={form.title}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, title: e.target.value }))
+                          }
+                          placeholder="Card title"
+                          required
+                          className="w-full px-3 py-2 rounded-md bg-background border border-border text-gray-100"
+                        />
+                        <textarea
+                          value={form.description}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              description: e.target.value,
+                            }))
+                          }
+                          placeholder="Description"
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-md bg-background border border-border text-gray-100 resize-none"
+                        />
+                        <div>
+                          <p className="mb-1 text-xs text-gray-400">Assignees</p>
+                          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+                            {members.map((uid) => (
+                              <label
+                                key={uid}
+                                className="flex items-center gap-2 text-xs text-gray-200"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.assignees.includes(uid)}
+                                  onChange={() => toggleAssignee(uid)}
+                                />
+                                {uid === user?.uid ? "You" : uid.slice(0, 6)}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={form.label}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                label: e.target.value,
+                              }))
+                            }
+                            className="flex-1 px-2 py-2 rounded-md bg-background border border-border text-gray-100"
+                          >
+                            <option value="">No label</option>
+                            {boardLabels.map((label) => (
+                              <option key={label.id} value={label.id}>
+                                {label.name}
+                              </option>
+                            ))}
+                          </select>
+                          <LabelChip labelId={form.label} labels={boardLabels} />
+                        </div>
+                        <DeadlinePicker
+                          value={form.deadline}
+                          onChange={(deadline) =>
+                            setForm((prev) => ({ ...prev, deadline }))
+                          }
+                        />
+                        <div className="flex justify-between pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingListId(null);
+                              setForm(defaultForm());
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 text-gray-400 hover:text-white"
+                          >
+                            <X className="w-4 h-4" />
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!form.title.trim() || saving}
+                            className="px-3 py-1 rounded-md bg-accent hover:bg-accent/80 disabled:opacity-50"
+                          >
+                            {saving ? "Adding…" : "Add card"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingListId(column.id);
+                          setForm(defaultForm());
+                        }}
+                        className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add a card
+                      </button>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           )}
         </div>
       </main>
+
+      <CardDetailModal
+        open={Boolean(openCard)}
+        card={openCard?.card || null}
+        listId={openCard?.listId || ""}
+        lists={lists}
+        labels={boardLabels}
+        currentUserId={user?.uid}
+        onClose={() => setOpenCard(null)}
+        onMove={(listId) => {
+          if (openCard) handleMove(openCard.card.id, listId);
+        }}
+      />
+      <LabelsEditorModal
+        open={labelsOpen}
+        labels={boardLabels}
+        onClose={() => setLabelsOpen(false)}
+        onSave={async (next) => {
+          const result = await updateBoardLabels(boardId, next);
+          if (!result) return;
+          setBoard((prev) =>
+            prev
+              ? { ...prev, labels: result.labels, lists: result.lists }
+              : prev
+          );
+          setLabelsOpen(false);
+        }}
+      />
+      <MembersModal
+        open={membersOpen}
+        members={members}
+        ownerId={board?.ownerId}
+        currentUserId={user?.uid}
+        onClose={() => setMembersOpen(false)}
+        onAdd={async (email) => {
+          const result = await addBoardMember(boardId, email);
+          if (!result) return "Failed to add member";
+          if ("error" in result) return result.error;
+          setBoard((prev) =>
+            prev ? { ...prev, members: result.members } : prev
+          );
+          return null;
+        }}
+        onRemove={async (uid) => {
+          const result = await removeBoardMember(boardId, uid);
+          if (!result) return "Failed to remove member";
+          if ("error" in result) return result.error;
+          setBoard((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  members: result.members,
+                  lists: result.lists || prev.lists,
+                }
+              : prev
+          );
+          return null;
+        }}
+      />
     </div>
   );
 }

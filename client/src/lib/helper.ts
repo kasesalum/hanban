@@ -230,6 +230,123 @@ export async function addRecentBoard(
   }
 }
 
+export type BoardCardFields = {
+  title: string;
+  description?: string;
+  assignees?: string[];
+  label?: string;
+  deadline?: string;
+};
+
+export async function createBoardCard(
+  boardId: string,
+  listId: string,
+  fields: BoardCardFields
+): Promise<{ card: any; lists: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/cards`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        listId,
+        title: fields.title,
+        description: fields.description || "",
+        assignees: fields.assignees || [],
+        label: fields.label || "",
+        deadline: fields.deadline || "",
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed to create card");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export type BoardLabel = { id: string; name: string; color: string };
+
+export async function updateBoardLabels(
+  boardId: string,
+  labels: BoardLabel[]
+): Promise<{ labels: BoardLabel[]; lists: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/labels`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ labels }),
+    });
+    if (!res.ok) throw new Error("Failed to update labels");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export async function addBoardMember(
+  boardId: string,
+  email: string
+): Promise<{ members: string[] } | { error: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Failed to add member" };
+    return data;
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to add member" };
+  }
+}
+
+export async function removeBoardMember(
+  boardId: string,
+  uid: string
+): Promise<{ members: string[]; lists?: any[] } | { error: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/members`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Failed to remove member" };
+    return data;
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to remove member" };
+  }
+}
+
+export async function moveBoardCard(
+  boardId: string,
+  cardId: string,
+  listId: string
+): Promise<{ card: any; lists: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/cards/${cardId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ listId }),
+    });
+
+    if (!res.ok) throw new Error("Failed to move card");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 export async function openBoard(
   id: string,
   user: User,

@@ -3,6 +3,7 @@ import express from "express";
 import { db } from "../firebase.js";
 import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
+import { DEFAULT_LABELS, DEFAULT_LISTS } from "../boardLists.js";
 
 const router = express.Router();
 
@@ -125,6 +126,8 @@ router.post("/createBoard", async (req, res) => {
       privacy: privacy,
       members: [userId],
       background: background,
+      lists: DEFAULT_LISTS.map((list) => ({ ...list, cards: [] })),
+      labels: DEFAULT_LABELS.map((label) => ({ ...label })),
     };
 
     const newBoardDoc = await db.collection("Boards").add(newBoardData);

@@ -3,7 +3,7 @@
 import BoardCardSmall from "@/components/boards/boardCardSmall";
 import Sidebar from "@/components/navigation/sidebar";
 import { auth } from "@/lib/firebase";
-import { getBoardInfo, getUserBoards, openBoard } from "@/lib/helper";
+import { getBoardInfo, getUserBoards, openBoard, pinBoard } from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "@firebase/auth";
 import { Calendar, House, Inbox, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -66,9 +66,15 @@ export default function HomePage({ userName }: HomePageProps) {
     router.push("/login");
   };
 
-  function togglePinBoard(id: string): void {
-    throw new Error("Function not implemented.");
-  }
+  const togglePinBoard = async (id: string) => {
+    if (!user?.uid) return;
+    const previous = boardList;
+    setBoardList((prev) => prev.filter((b) => b.id !== id));
+    const newStatus = await pinBoard(user.uid, id);
+    if (newStatus !== false) {
+      setBoardList(previous);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-background text-gray-100">
@@ -119,6 +125,7 @@ export default function HomePage({ userName }: HomePageProps) {
                       <BoardCardSmall
                         key={board.id}
                         board={board}
+                        togglePin={togglePinBoard}
                         openBoard={() =>
                           user && openBoard(board.id, user, router)
                         }
