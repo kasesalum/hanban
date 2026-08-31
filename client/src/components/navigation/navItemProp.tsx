@@ -9,9 +9,17 @@ interface NavItemProps {
   icon: ReactNode;
   onClick?: () => void;
   badge?: boolean;
+  collapsed?: boolean;
 }
 
-export default function NavItem({ label, href, icon, onClick, badge }: NavItemProps) {
+export default function NavItem({
+  label,
+  href,
+  icon,
+  onClick,
+  badge,
+  collapsed,
+}: NavItemProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -20,7 +28,9 @@ export default function NavItem({ label, href, icon, onClick, badge }: NavItemPr
   return (
     <button
       onClick={onClick ?? (() => router.push(href))}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition
+      title={collapsed ? label : undefined}
+      className={`relative flex items-center gap-2 py-2 rounded-lg transition
+        ${collapsed ? "justify-center px-2" : "px-3"}
         ${
           isActive
             ? "bg-accent text-white hover:bg-accent-hover"
@@ -29,9 +39,15 @@ export default function NavItem({ label, href, icon, onClick, badge }: NavItemPr
       `}
     >
       {icon}
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
       {badge ? (
-        <span className="ml-auto w-2 h-2 rounded-full bg-blue-400" />
+        <span
+          className={`rounded-full bg-blue-400 ${
+            collapsed
+              ? "absolute top-1.5 right-1.5 w-1.5 h-1.5"
+              : "ml-auto w-2 h-2"
+          }`}
+        />
       ) : null}
     </button>
   );
