@@ -139,7 +139,15 @@ export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
   return (
     <aside className="w-70 bg-background text-gray-200 h-screen flex flex-col border-r border-border">
       <div className="flex items-center justify-between px-4 py-3">
-        <h2 className="text-xl font-bold">KanDo</h2>
+      <Image
+          src="/scooby.png"
+          alt="Scooby"
+          width={48}
+          height={48}
+          className="object-contain"
+        />
+        <h2 className="text-xl font-bold">HANBAN</h2>
+      
         {user === undefined ? (
           <div className="w-9 h-9 rounded-full bg-gray-600 animate-pulse" />
         ) : user ? (
@@ -231,14 +239,6 @@ export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
           ))
         )}
       </nav>
-
-      <div className="border-t border-border p-4">
-        <nav className="flex flex-col gap-2">
-          {bottomNavItems.map((item) => (
-            <NavItem key={item.label} {...item} />
-          ))}
-        </nav>
-      </div>
     </aside>
   );
 }
