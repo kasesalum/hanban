@@ -104,7 +104,7 @@ export default function BoardCard({
       className={`relative w-full rounded-xl shadow-md 
     bg-background-alt hover:bg-border-hover transition
     flex flex-col group overflow-hidden
-    ${compact ? "min-w-0" : "min-w-[250px] h-36"}
+    ${compact ? "min-w-0" : "w-44 shrink-0 h-36"}
     ${clickable ? "cursor-pointer" : ""}`}
     >
       {togglePin && (
