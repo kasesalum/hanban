@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/navigation/sidebar";
+import AppShell from "@/components/navigation/appShell";
+import HeaderActions from "@/components/navigation/headerActions";
+import PageHeader from "@/components/navigation/pageHeader";
 import {
   AlertTriangle,
   Bell,
@@ -104,31 +106,33 @@ export default function NotificationsPage({
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-background text-gray-100">
-      <Sidebar
-        onSignOut={handleSignOut}
-        userName={userName}
-        user={user}
-        unreadCount={unreadCount}
+    <AppShell
+      onSignOut={handleSignOut}
+      userName={userName}
+      user={user}
+      unreadCount={unreadCount}
+    >
+      <PageHeader
+        title="Notifications"
+        icon={<Bell className="w-6 h-6" />}
+        actions={
+          unreadCount > 0 ? (
+            <HeaderActions
+              primary={
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-sm text-gray-300 hover:text-white px-3 py-1.5 rounded-md border border-border hover:bg-border-hover"
+                >
+                  <span className="sm:hidden">Read all</span>
+                  <span className="hidden sm:inline">Mark all as read</span>
+                </button>
+              }
+            />
+          ) : undefined
+        }
       />
 
-      <main className="flex-1 overflow-y-auto space-y-10">
-        <header className="flex items-center justify-between px-8 py-4 border-b border-border w-full">
-          <h1 className="flex items-center text-2xl font-semibold">
-            <Bell className="inline-block w-6 h-6 mr-4" />
-            Notifications
-          </h1>
-          {unreadCount > 0 && (
-            <button
-              onClick={handleMarkAllRead}
-              className="text-sm text-gray-300 hover:text-white px-3 py-1.5 rounded-md border border-border hover:bg-border-hover"
-            >
-              Mark all as read
-            </button>
-          )}
-        </header>
-
-        <div className="px-8 pb-10">
+      <div className="px-4 sm:px-6 lg:px-8 pb-10 pt-6">
           {loading ? (
             <p className="text-gray-400">Loading notifications...</p>
           ) : notifications.length === 0 ? (
@@ -180,7 +184,6 @@ export default function NotificationsPage({
             </ul>
           )}
         </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

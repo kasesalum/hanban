@@ -12,7 +12,9 @@ import {
   Component,
   Waypoints,
 } from "lucide-react";
-import Sidebar from "@/components/navigation/sidebar";
+import AppShell from "@/components/navigation/appShell";
+import HeaderActions from "@/components/navigation/headerActions";
+import PageHeader from "@/components/navigation/pageHeader";
 import BoardCard from "@/components/boards/boardCard";
 import BoardCreationModal from "@/components/boards/boardCreationModal";
 
@@ -161,51 +163,49 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-gray-100">
-      <Sidebar onSignOut={handleSignOut} userName={userName} user={user} />
-
-      <main className="flex-1 overflow-y-auto space-y-10">
-        <header className="flex max-h-16 items-center justify-between px-8 py-4 border-b border-border w-full">
-          <h1 className="flex items-center text-2xl font-semibold">
-            <LayoutDashboard className="inline-block w-6 h-6 mr-4" />
-            My Boards
-          </h1>
-          <button
-            onClick={() => setNewBoardOpen(true)}
-            className="relative inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all duration-300 ease-out group"
-          >
-            <span
-              aria-hidden="true"
-              className="absolute inset-0 rounded-xl inset-0 pointer-events-none z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300
+    <AppShell onSignOut={handleSignOut} userName={userName} user={user}>
+      <PageHeader
+        title="My Boards"
+        icon={<LayoutDashboard className="w-6 h-6" />}
+        actions={
+          <HeaderActions
+            primary={
+              <button
+                onClick={() => setNewBoardOpen(true)}
+                className="relative inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-white font-medium transition-all duration-300 ease-out group"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-xl pointer-events-none z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300
                bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute inset-[1px] rounded-lg bg-background-alt pointer-events-none z-10"
-            />
-            <span className="relative z-20 flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Create Board
-            </span>
-          </button>
-          <BoardCreationModal
-            open={newBoardOpen}
-            onClose={() => setNewBoardOpen(false)}
-            onCreated={async (newBoardId: string) => {
-              if (!user) return;
-
-              const newBoard = await getBoardInfo(newBoardId); // fetch full board info
-              if (!newBoard) return;
-
-              setOwnedBoards((prev) => [
-                ...prev,
-                { ...newBoard, pinned: false },
-              ]);
-            }}
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-[1px] rounded-lg bg-background-alt pointer-events-none z-10"
+                />
+                <span className="relative z-20 flex items-center gap-2">
+                  <Plus className="w-5 h-5" />
+                  <span className="hidden sm:inline">Create Board</span>
+                </span>
+              </button>
+            }
           />
-        </header>
+        }
+      />
+      <BoardCreationModal
+        open={newBoardOpen}
+        onClose={() => setNewBoardOpen(false)}
+        onCreated={async (newBoardId: string) => {
+          if (!user) return;
 
-        <div className="px-8 space-y-15">
+          const newBoard = await getBoardInfo(newBoardId);
+          if (!newBoard) return;
+
+          setOwnedBoards((prev) => [...prev, { ...newBoard, pinned: false }]);
+        }}
+      />
+
+      <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-10">
           <section>
             <h2 className="flex text-xl items-center font-semibold mb-3">
               <Star className="inline-block w-5 h-5 mr-3" />
@@ -269,7 +269,6 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
             </div>
           </section>
         </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

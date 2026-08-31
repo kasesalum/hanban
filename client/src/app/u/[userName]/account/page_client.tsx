@@ -11,7 +11,8 @@ import {
   signOut,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/navigation/sidebar";
+import AppShell from "@/components/navigation/appShell";
+import PageHeader from "@/components/navigation/pageHeader";
 import { CircleUser, Pen } from "lucide-react";
 
 interface DashboardPageProps {
@@ -86,18 +87,13 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-background text-gray-100">
-      <Sidebar onSignOut={handleSignOut} userName={userName} user={user} />
+    <AppShell onSignOut={handleSignOut} userName={userName} user={user}>
+      <PageHeader
+        title="Account Settings"
+        icon={<CircleUser className="w-6 h-6" />}
+      />
 
-      <main className="flex-1 overflow-y-auto space-y-10">
-        <header className="flex items-center justify-between px-8 py-4 border-b border-border w-full">
-          <h1 className="flex items-center text-2xl font-semibold">
-            <CircleUser className="inline-block w-6 h-6 mr-4" />
-            Account Settings
-          </h1>
-        </header>
-
-        <div className="px-8 space-y-15">
+      <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-10">
           <section className="bg-background-alt rounded-xl shadow-md p-6 space-y-6">
             <h2 className="text-xl font-semibold">Profile</h2>
             <div className="flex items-center justify-between">
@@ -216,9 +212,10 @@ export default function AccountPage({ userName }: DashboardPageProps) {
         </div>
 
         {statusMessage && (
-          <p className="text-sm text-blue-500">{statusMessage}</p>
+          <p className="text-sm text-blue-500 px-4 sm:px-6 lg:px-8 pb-6">
+            {statusMessage}
+          </p>
         )}
-      </main>
 
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -259,6 +256,6 @@ export default function AccountPage({ userName }: DashboardPageProps) {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }

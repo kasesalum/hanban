@@ -11,7 +11,13 @@ import CardDetailModal, {
 import DeadlinePicker, { tomorrowISO } from "@/components/boards/deadlinePicker";
 import LabelsEditorModal from "@/components/boards/labelsEditorModal";
 import MembersModal from "@/components/boards/membersModal";
-import Sidebar from "@/components/navigation/sidebar";
+import {
+  BoardFilterMenu,
+  BoardSettingsMenu,
+} from "@/components/boards/boardHeaderMenus";
+import AppShell from "@/components/navigation/appShell";
+import HeaderActions from "@/components/navigation/headerActions";
+import PageHeader from "@/components/navigation/pageHeader";
 import { auth } from "@/lib/firebase";
 import {
   addBoardMember,
@@ -115,7 +121,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     card: DetailCard;
     listId: string;
   } | null>(null);
-  const [myTasksOnly, setMyTasksOnly] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState("");
   const [labelFilter, setLabelFilter] = useState("");
   const [dragOverList, setDragOverList] = useState<string | null>(null);
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -157,7 +163,14 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const title = board?.name || decodeURIComponent(boardName) || "Untitled Board";
 
   const matchesFilters = (card: TaskCard) => {
-    if (myTasksOnly && user?.uid && !card.assignees?.includes(user.uid)) {
+    if (assigneeFilter === "me" && user?.uid && !card.assignees?.includes(user.uid)) {
+      return false;
+    }
+    if (
+      assigneeFilter &&
+      assigneeFilter !== "me" &&
+      !card.assignees?.includes(assigneeFilter)
+    ) {
       return false;
     }
     if (labelFilter && card.label !== labelFilter) return false;
@@ -230,11 +243,13 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-gray-100">
-      <Sidebar onSignOut={handleSignOut} userName={userName} user={user} />
-
-      <main className="relative flex-1 min-w-0 flex flex-col overflow-hidden">
-        {board?.background?.type === "color" ? (
+    <AppShell
+      onSignOut={handleSignOut}
+      userName={userName}
+      user={user}
+      mainClassName="relative flex-1 min-w-0 flex flex-col overflow-hidden"
+    >
+      {board?.background?.type === "color" ? (
           <div
             className="absolute inset-0"
             style={{ background: board.background.value }}
@@ -250,54 +265,41 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         )}
         <div className="absolute inset-0 bg-black/25" />
 
-        <header className="relative z-10 flex max-h-16 items-center justify-between gap-4 px-8 py-4 border-b border-white/10 bg-black/25 backdrop-blur-sm w-full">
-          <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-2xl font-semibold truncate">{title}</h1>
-            {board?.privacy && (
+        <PageHeader
+          variant="overlay"
+          title={title}
+          leading={
+            board?.privacy ? (
               <span className="shrink-0 text-xs uppercase tracking-wide px-2 py-1 rounded-md bg-black/40 text-gray-200">
                 {board.privacy}
               </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => setLabelsOpen(true)}
-              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
-            >
-              Labels
-            </button>
-            <button
-              type="button"
-              onClick={() => setMembersOpen(true)}
-              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
-            >
-              Members
-            </button>
-            <label className="flex items-center gap-2 text-sm text-gray-200">
-              <input
-                type="checkbox"
-                checked={myTasksOnly}
-                onChange={(e) => setMyTasksOnly(e.target.checked)}
-              />
-              My tasks
-            </label>
-            <select
-              value={labelFilter}
-              onChange={(e) => setLabelFilter(e.target.value)}
-              className="text-sm px-2 py-1 rounded-md bg-black/40 border border-white/10"
-            >
-              <option value="">All labels</option>
-              {boardLabels.map((label) => (
-                <option key={label.id} value={label.id}>
-                  {label.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </header>
+            ) : undefined
+          }
+          actions={
+            <HeaderActions
+              overlay
+              primary={
+                <>
+                  <BoardFilterMenu
+                    assigneeFilter={assigneeFilter}
+                    labelFilter={labelFilter}
+                    labels={boardLabels}
+                    members={members}
+                    currentUserId={user?.uid}
+                    onAssigneeChange={setAssigneeFilter}
+                    onLabelChange={setLabelFilter}
+                  />
+                  <BoardSettingsMenu
+                    onEditLabels={() => setLabelsOpen(true)}
+                    onEditMembers={() => setMembersOpen(true)}
+                  />
+                </>
+              }
+            />
+          }
+        />
 
-        <div className="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-6">
+        <div className="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
           {loading ? (
             <p className="text-white/80">Loading board…</p>
           ) : !board ? (
@@ -473,7 +475,6 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
             </div>
           )}
         </div>
-      </main>
 
       <CardDetailModal
         open={Boolean(openCard)}
@@ -533,6 +534,6 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           return null;
         }}
       />
-    </div>
+    </AppShell>
   );
 }

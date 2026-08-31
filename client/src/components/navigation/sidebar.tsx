@@ -21,19 +21,22 @@ import { useState, useRef, useEffect, Key } from "react";
 import Image from "next/image";
 import NavItem from "./navItemProp";
 import SearchModal from "../search/searchModal";
+import { useSidebar } from "./sidebarContext";
+
+export type SidebarUser =
+  | {
+      photoURL?: string | null;
+      displayName?: string | null;
+      email?: string | null;
+      uid: string;
+    }
+  | null
+  | undefined;
 
 interface SidebarProps {
   onSignOut: () => void;
   userName: string;
-  user:
-    | {
-        photoURL?: string | null;
-        displayName?: string | null;
-        email?: string | null;
-        uid: string;
-      }
-    | null
-    | undefined;
+  user: SidebarUser;
   unreadCount?: number;
 }
 
@@ -49,7 +52,7 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [fetchedUnread, setFetchedUnread] = useState(0);
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggleCollapsed, setUnreadCount } = useSidebar();
   const menuRef = useRef<HTMLDivElement>(null);
   const unreadCount = unreadCountProp ?? fetchedUnread;
 
@@ -112,17 +115,8 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
   }, [user, unreadCountProp]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("sidebarCollapsed");
-    if (stored === "true") setCollapsed(true);
-  }, []);
-
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("sidebarCollapsed", String(next));
-      return next;
-    });
-  };
+    setUnreadCount(unreadCount);
+  }, [unreadCount, setUnreadCount]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -144,22 +138,6 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
 
   return (
     <>
-      {collapsed && (
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          title="Open sidebar"
-          className="lg:hidden fixed top-3 left-3 z-30 p-2 rounded-lg border border-border bg-background-alt text-gray-300 hover:bg-accent-hover hover:text-white shadow-sm"
-        >
-          <span className="relative block">
-            <PanelLeftOpen className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-400" />
-            )}
-          </span>
-        </button>
-      )}
-
       {!collapsed && (
         <button
           type="button"
