@@ -387,3 +387,71 @@ export async function globalSearch(query: string) {
 
   return [...boardResults, ...commandResults];
 }
+
+export type AppNotification = {
+  id: string;
+  userId: string;
+  type: "assignee_added" | "deadline_approaching" | "deadline_overdue";
+  boardId: string;
+  boardName: string;
+  urlName: string;
+  cardId: string;
+  cardTitle: string;
+  createdAt: string;
+  read: boolean;
+};
+
+export async function getUserNotifications(
+  userId: string
+): Promise<{ notifications: AppNotification[]; unreadCount: number }> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/user/notifications?userId=${encodeURIComponent(userId)}`
+    );
+    if (!res.ok) throw new Error("Failed to fetch notifications");
+    const data = await res.json();
+    return {
+      notifications: data.notifications || [],
+      unreadCount: data.unreadCount || 0,
+    };
+  } catch (err) {
+    console.error(err);
+    return { notifications: [], unreadCount: 0 };
+  }
+}
+
+export async function markNotificationRead(
+  notificationId: string,
+  userId: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/user/notifications/${notificationId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      }
+    );
+    return res.ok;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+export async function markAllNotificationsRead(
+  userId: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/user/notifications/read-all`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}

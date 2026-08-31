@@ -8,9 +8,10 @@ interface NavItemProps {
   href: string;
   icon: ReactNode;
   onClick?: () => void;
+  badge?: boolean;
 }
 
-export default function NavItem({ label, href, icon, onClick }: NavItemProps) {
+export default function NavItem({ label, href, icon, onClick, badge }: NavItemProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -29,6 +30,9 @@ export default function NavItem({ label, href, icon, onClick }: NavItemProps) {
     >
       {icon}
       <span>{label}</span>
+      {badge ? (
+        <span className="ml-auto w-2 h-2 rounded-full bg-blue-400" />
+      ) : null}
     </button>
   );
 }

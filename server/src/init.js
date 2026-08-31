@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import userRoutes from "./routes/user.js";
+import notificationRoutes from "./routes/notification.js";
 import boardRoutes from "./routes/board.js";
 import searchRoutes from "./routes/search.js";
 import { startDeadlineNotifications } from "./deadlineNotifications.js";
@@ -15,6 +16,7 @@ app.use(express.json());
 console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 
+app.use("/api/user", notificationRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/board", boardRoutes);
 app.use("/api/search", searchRoutes);

@@ -1,6 +1,6 @@
 "use client";
 
-import { getRecentBoards, getBoardInfo, openBoard } from "@/lib/helper";
+import { getRecentBoards, getBoardInfo, openBoard, getUserNotifications } from "@/lib/helper";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -32,9 +32,10 @@ interface SidebarProps {
       }
     | null
     | undefined;
+  unreadCount?: number;
 }
 
-export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
+export default function Sidebar({ onSignOut, userName, user, unreadCount: unreadCountProp }: SidebarProps) {
   const router = useRouter();
   const [recentBoards, setRecentBoards] = useState<
     {
@@ -45,7 +46,9 @@ export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
   >([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
+  const [fetchedUnread, setFetchedUnread] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  const unreadCount = unreadCountProp ?? fetchedUnread;
 
   const navItems = [
     {
@@ -62,29 +65,7 @@ export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
       label: "Notifications",
       href: `/u/${userName}/notifications`,
       icon: <Bell className="w-5 h-5" />,
-    },
-    {
-      label: "Templates",
-      href: `/templates`,
-      icon: <LayoutTemplate className="w-5 h-5" />,
-    },
-  ];
-
-  const bottomNavItems = [
-    {
-      label: "Feedback",
-      href: `/feedback`,
-      icon: <StickyNote className="w-5 h-5" />,
-    },
-    {
-      label: "Settings",
-      href: `/settings`,
-      icon: <Settings className="w-5 h-5" />,
-    },
-    {
-      label: "Help Center",
-      href: `/help`,
-      icon: <HelpCircleIcon className="w-5 h-5" />,
+      badge: unreadCount > 0,
     },
   ];
 
@@ -117,6 +98,15 @@ export default function Sidebar({ onSignOut, userName, user }: SidebarProps) {
 
     fetchRecents();
   }, [user]);
+
+  useEffect(() => {
+    if (unreadCountProp !== undefined) return;
+    if (!user?.uid) return;
+
+    getUserNotifications(user.uid).then((data) => {
+      setFetchedUnread(data.unreadCount);
+    });
+  }, [user, unreadCountProp]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

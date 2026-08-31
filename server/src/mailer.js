@@ -1,5 +1,9 @@
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
+import {
+  NOTIFICATION_TYPES,
+  createInboxNotifications,
+} from "./notifications.js";
 
 let transporter;
 let warnedMissingConfig = false;
@@ -109,6 +113,15 @@ export async function notifyAssigneesAdded({
     <p><a href="${link}">Open the board</a></p>
   `;
 
+  await createInboxNotifications({
+    type: NOTIFICATION_TYPES.assigneeAdded,
+    userIds: card.assignees || [],
+    boardId,
+    boardName,
+    urlName,
+    card,
+  });
+
   return sendToAssignees({
     uids: card.assignees || [],
     subject,
@@ -138,12 +151,24 @@ export async function notifyDeadline({
     <p><a href="${link}">Open the board</a></p>
   `;
 
-  return sendToAssignees({
+  await createInboxNotifications({
+    type: approaching
+      ? NOTIFICATION_TYPES.deadlineApproaching
+      : NOTIFICATION_TYPES.deadlineOverdue,
+    userIds: card.assignees || [],
+    boardId,
+    boardName,
+    urlName,
+    card,
+  });
+
+  await sendToAssignees({
     uids: card.assignees || [],
     subject,
     text,
     html,
   });
+  return true;
 }
 
 function escapeHtml(value) {
