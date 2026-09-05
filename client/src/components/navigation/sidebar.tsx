@@ -136,6 +136,61 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
     };
   }, [menuOpen]);
 
+  const profileMenu =
+    user === undefined || !user ? (
+      <div className="w-9 h-9 rounded-full bg-gray-600 animate-pulse shrink-0" />
+    ) : (
+      <div className="relative shrink-0" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          className="flex items-center"
+        >
+          <Image
+            src={user.photoURL || "/default-avatar.png"}
+            alt="Profile"
+            width={collapsed ? 32 : 36}
+            height={collapsed ? 32 : 36}
+            className="rounded-full"
+          />
+        </button>
+
+        {menuOpen && (
+          <div
+            className={`absolute mt-2 w-48 rounded-md bg-background-alt shadow-lg border border-border z-50 ${
+              collapsed ? "left-full ml-2 top-0" : "left-0"
+            }`}
+          >
+            <div className="px-4 py-3 border-b border-border">
+              <p className="text-sm font-medium text-white">
+                {user.displayName || "Unnamed"}
+              </p>
+              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/u/${userName}/account`);
+              }}
+              className="block w-full text-left px-4 py-2 text-sm hover:bg-border-hover"
+            >
+              <User className="inline-block w-4 h-4 mr-2" />
+              Account
+            </button>
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-border-hover"
+            >
+              <LogOut className="inline-block w-4 h-4 mr-2" />
+              Sign Out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+
   return (
     <>
       {!collapsed && (
@@ -160,83 +215,30 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
         }`}
       >
         {collapsed ? (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title="Expand sidebar"
-            className="p-1.5 rounded-lg text-gray-400 hover:bg-accent-hover hover:text-white transition"
-          >
-            <PanelLeftOpen className="w-5 h-5" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title="Expand sidebar"
+              className="p-1.5 rounded-lg text-gray-400 hover:bg-accent-hover hover:text-white transition"
+            >
+              <PanelLeftOpen className="w-5 h-5" />
+            </button>
+            {profileMenu}
+          </>
         ) : (
-          <div className="flex items-center gap-2 min-w-0">
-            <Image
-              src="/scooby.png"
-              alt="Scooby"
-              width={40}
-              height={40}
-              className="object-contain"
-            />
+          <div className="flex items-center gap-2 min-w-0 w-full">
+            {profileMenu}
             <h2 className="text-xl font-bold">HANBAN</h2>
             <button
               type="button"
               onClick={toggleCollapsed}
               title="Collapse sidebar"
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-accent-hover hover:text-white transition"
+              className="p-1.5 rounded-lg text-gray-400 hover:bg-accent-hover hover:text-white transition ml-auto"
             >
               <PanelLeftClose className="w-5 h-5" />
             </button>
           </div>
-        )}
-
-        {user === undefined ? (
-          <div className="w-9 h-9 rounded-full bg-gray-600 animate-pulse" />
-        ) : user ? (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((prev) => !prev)}
-              className="flex items-center"
-            >
-              <Image
-                src={user.photoURL || "/default-avatar.png"}
-                alt="Profile"
-                width={collapsed ? 32 : 36}
-                height={collapsed ? 32 : 36}
-                className="rounded-full"
-              />
-            </button>
-
-            {menuOpen && (
-              <div
-                className={`absolute mt-2 w-48 rounded-md bg-background-alt shadow-lg border border-border z-50 ${
-                  collapsed ? "left-full ml-2 top-0" : "right-0"
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-border">
-                  <p className="text-sm font-medium text-white">
-                    {user.displayName || "Unnamed"}
-                  </p>
-                  <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                </div>
-                <button
-                  onClick={() => router.push(`/u/${userName}/account`)}
-                  className="block w-full text-left px-4 py-2 text-sm hover:bg-border-hover"
-                >
-                  <User className="inline-block w-4 h-4 mr-2" />
-                  Account
-                </button>
-                <button
-                  onClick={onSignOut}
-                  className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-border-hover"
-                >
-                  <LogOut className="inline-block w-4 h-4 mr-2" />
-                  Sign Out
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-gray-600 animate-pulse" />
         )}
       </div>
 
