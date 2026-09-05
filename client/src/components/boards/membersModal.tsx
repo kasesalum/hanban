@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { assigneeLabel } from "@/components/boards/boardCard";
+import { assigneeLabel, type MemberProfile } from "@/components/boards/boardCard";
 
 interface MembersModalProps {
   open: boolean;
   members: string[];
   ownerId?: string;
   currentUserId?: string;
+  memberProfiles?: MemberProfile[];
   onClose: () => void;
   onAdd: (email: string) => Promise<string | null>;
   onRemove: (uid: string) => Promise<string | null>;
@@ -19,6 +20,7 @@ export default function MembersModal({
   members,
   ownerId,
   currentUserId,
+  memberProfiles,
   onClose,
   onAdd,
   onRemove,
@@ -64,7 +66,7 @@ export default function MembersModal({
               className="flex items-center justify-between gap-2 text-sm"
             >
               <span>
-                {assigneeLabel(uid, currentUserId)}
+                {assigneeLabel(uid, currentUserId, memberProfiles)}
                 {uid === ownerId ? " (owner)" : ""}
               </span>
               {uid !== ownerId && (

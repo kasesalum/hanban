@@ -4,6 +4,7 @@ export const NOTIFICATION_TYPES = {
   assigneeAdded: "assignee_added",
   deadlineApproaching: "deadline_approaching",
   deadlineOverdue: "deadline_overdue",
+  boardMemberAdded: "board_member_added",
 };
 
 export async function createInboxNotifications({

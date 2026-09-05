@@ -9,7 +9,8 @@ import {
   withDefaultLabels,
   withDefaultLists,
 } from "../boardLists.js";
-import { notifyAssigneesAdded } from "../mailer.js";
+import { notifyAssigneesAdded, notifyBoardMemberAdded } from "../mailer.js";
+import { memberProfilesForUids } from "../users.js";
 
 const router = express.Router();
 const algolia = algoliasearch(
@@ -203,6 +204,7 @@ router.post("/:id/members", async (req, res) => {
   try {
     const boardId = req.params.id;
     const email = String(req.body.email || "").trim();
+    const addedBy = String(req.body.addedBy || "").trim();
     if (!email) {
       return res.status(400).json({ error: "Missing email" });
     }
@@ -213,12 +215,17 @@ router.post("/:id/members", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
+    const boardData = boardSnap.data();
+    const existingMembers = boardData.members || [];
+
     let userRecord;
     try {
       userRecord = await admin.auth().getUserByEmail(email);
     } catch {
       return res.status(404).json({ error: "User not found" });
     }
+
+    const alreadyMember = existingMembers.includes(userRecord.uid);
 
     await boardRef.update({
       members: admin.firestore.FieldValue.arrayUnion(userRecord.uid),
@@ -227,8 +234,20 @@ router.post("/:id/members", async (req, res) => {
     const nextSnap = await boardRef.get();
     const members = nextSnap.data().members || [];
     await updateAlgoliaMembers(boardId, members);
+    const memberProfiles = await memberProfilesForUids(members);
 
-    res.json({ members });
+    if (!alreadyMember && userRecord.uid !== addedBy) {
+      notifyBoardMemberAdded({
+        userIds: [userRecord.uid],
+        boardId,
+        boardName: boardData.name || "Untitled board",
+        urlName: boardData.urlName,
+      }).catch((err) => {
+        console.error("Error sending board member notification:", err);
+      });
+    }
+
+    res.json({ members, memberProfiles });
   } catch (error) {
     console.error("Error adding member:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -283,8 +302,9 @@ router.delete("/:id/members", async (req, res) => {
     const nextSnap = await boardRef.get();
     const members = nextSnap.data().members || [];
     await updateAlgoliaMembers(boardId, members);
+    const memberProfiles = await memberProfilesForUids(members);
 
-    res.json({ members, lists });
+    res.json({ members, lists, memberProfiles });
   } catch (error) {
     console.error("Error removing member:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -319,7 +339,9 @@ router.get("/:id", async (req, res) => {
       await boardRef.set(updates, { merge: true });
     }
 
-    res.json({ id: boardSnap.id, ...data, lists, labels });
+    const memberProfiles = await memberProfilesForUids(data.members || []);
+
+    res.json({ id: boardSnap.id, ...data, lists, labels, memberProfiles });
   } catch (error) {
     console.error("Error fetching board:", error);
     res.status(500).json({ error: "Internal server error" });

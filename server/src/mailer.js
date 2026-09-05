@@ -130,6 +130,39 @@ export async function notifyAssigneesAdded({
   });
 }
 
+export async function notifyBoardMemberAdded({
+  userIds = [],
+  boardId,
+  boardName,
+  urlName,
+}) {
+  const link = boardUrl(boardId, urlName);
+  const subject = `You were added to “${boardName}”`;
+  const text = [
+    `You were added to the board “${boardName}”.`,
+    `Open the board: ${link}`,
+  ].join("\n");
+  const html = `
+    <p>You were added to the board <strong>${escapeHtml(boardName)}</strong>.</p>
+    <p><a href="${link}">Open the board</a></p>
+  `;
+
+  await createInboxNotifications({
+    type: NOTIFICATION_TYPES.boardMemberAdded,
+    userIds,
+    boardId,
+    boardName,
+    urlName,
+  });
+
+  return sendToAssignees({
+    uids: userIds,
+    subject,
+    text,
+    html,
+  });
+}
+
 export async function notifyDeadline({
   kind,
   boardId,

@@ -8,6 +8,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
 
 type Board = {
   objectID: string;
+  id: string;
   name: string;
   urlName: string;
   ownerId: string;
@@ -18,8 +19,7 @@ type Board = {
 };
 
 type UserBoardsResponse = {
-  owned: Board[];
-  shared: Board[];
+  boards: Board[];
   pinned: string[];
 };
 
@@ -52,10 +52,13 @@ export async function getUserBoards(
 
     if (!res.ok) throw new Error("Failed to fetch boards");
 
-    return boards as UserBoardsResponse;
+    return {
+      boards: boards.boards || [],
+      pinned: boards.pinned || [],
+    };
   } catch (err) {
     console.error(err);
-    return { owned: [], shared: [], pinned: [] };
+    return { boards: [], pinned: [] };
   }
 }
 
@@ -287,15 +290,26 @@ export async function updateBoardLabels(
   }
 }
 
+export type MemberProfile = {
+  uid: string;
+  displayName?: string;
+  email?: string;
+};
+
 export async function addBoardMember(
   boardId: string,
-  email: string
-): Promise<{ members: string[] } | { error: string } | null> {
+  email: string,
+  addedBy?: string
+): Promise<
+  | { members: string[]; memberProfiles?: MemberProfile[] }
+  | { error: string }
+  | null
+> {
   try {
     const res = await fetch(`${API_BASE}/api/board/${boardId}/members`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, addedBy }),
     });
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Failed to add member" };
@@ -309,7 +323,11 @@ export async function addBoardMember(
 export async function removeBoardMember(
   boardId: string,
   uid: string
-): Promise<{ members: string[]; lists?: any[] } | { error: string } | null> {
+): Promise<
+  | { members: string[]; lists?: any[]; memberProfiles?: MemberProfile[] }
+  | { error: string }
+  | null
+> {
   try {
     const res = await fetch(`${API_BASE}/api/board/${boardId}/members`, {
       method: "DELETE",
@@ -391,7 +409,11 @@ export async function globalSearch(query: string) {
 export type AppNotification = {
   id: string;
   userId: string;
-  type: "assignee_added" | "deadline_approaching" | "deadline_overdue";
+  type:
+    | "assignee_added"
+    | "deadline_approaching"
+    | "deadline_overdue"
+    | "board_member_added";
   boardId: string;
   boardName: string;
   urlName: string;

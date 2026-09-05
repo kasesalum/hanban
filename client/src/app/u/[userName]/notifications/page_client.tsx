@@ -25,6 +25,13 @@ interface NotificationsPageProps {
 }
 
 function notificationCopy(item: AppNotification) {
+  if (item.type === "board_member_added") {
+    return {
+      icon: UserPlus,
+      title: `You were added to “${item.boardName}”`,
+      detail: "You now have access to this board",
+    };
+  }
   if (item.type === "assignee_added") {
     return {
       icon: UserPlus,

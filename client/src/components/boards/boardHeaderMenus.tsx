@@ -1,6 +1,6 @@
 "use client";
 
-import { assigneeLabel, type BoardLabel } from "@/components/boards/boardCard";
+import { assigneeLabel, type BoardLabel, type MemberProfile } from "@/components/boards/boardCard";
 import { Filter, Settings } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -55,6 +55,7 @@ export function BoardFilterMenu({
   labels,
   members,
   currentUserId,
+  memberProfiles,
   onAssigneeChange,
   onLabelChange,
 }: {
@@ -63,6 +64,7 @@ export function BoardFilterMenu({
   labels: BoardLabel[];
   members: string[];
   currentUserId?: string;
+  memberProfiles?: MemberProfile[];
   onAssigneeChange: (value: string) => void;
   onLabelChange: (value: string) => void;
 }) {
@@ -88,7 +90,7 @@ export function BoardFilterMenu({
             {currentUserId && <option value="me">Me</option>}
             {otherMembers.map((uid) => (
               <option key={uid} value={uid}>
-                {assigneeLabel(uid, currentUserId)}
+                {assigneeLabel(uid, currentUserId, memberProfiles)}
               </option>
             ))}
           </select>

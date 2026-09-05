@@ -6,6 +6,7 @@ import {
   LabelChip,
   assigneeLabel,
   type BoardLabel,
+  type MemberProfile,
 } from "@/components/boards/boardCard";
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
 
@@ -25,6 +26,7 @@ interface CardDetailModalProps {
   lists: { id: string; title: string }[];
   labels?: BoardLabel[];
   currentUserId?: string;
+  memberProfiles?: MemberProfile[];
   onClose: () => void;
   onMove: (listId: string) => void;
 }
@@ -36,6 +38,7 @@ export default function CardDetailModal({
   lists,
   labels,
   currentUserId,
+  memberProfiles,
   onClose,
   onMove,
 }: CardDetailModalProps) {
@@ -131,7 +134,7 @@ export default function CardDetailModal({
                   key={uid}
                   className="text-xs px-2 py-1 rounded-full bg-background-alt border border-border"
                 >
-                  {assigneeLabel(uid, currentUserId)}
+                  {assigneeLabel(uid, currentUserId, memberProfiles)}
                 </span>
               ))}
             </div>

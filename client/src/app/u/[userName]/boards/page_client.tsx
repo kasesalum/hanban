@@ -10,7 +10,6 @@ import {
   Plus,
   Star,
   Component,
-  Waypoints,
 } from "lucide-react";
 import AppShell from "@/components/navigation/appShell";
 import HeaderActions from "@/components/navigation/headerActions";
@@ -26,8 +25,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [newBoardOpen, setNewBoardOpen] = useState(false);
-  const [ownedBoards, setOwnedBoards] = useState<any[]>([]);
-  const [sharedBoards, setSharedBoards] = useState<any[]>([]);
+  const [boards, setBoards] = useState<any[]>([]);
   const [pinnedBoards, setPinnedBoards] = useState<any[]>([]);
 
   function redirectToUserBoards(
@@ -82,32 +80,20 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
     const fetchBoards = async () => {
       if (!user) return;
 
-      const { owned, shared, pinned } = await getUserBoards(user.uid);
+      const { boards: memberBoards, pinned } = await getUserBoards(user.uid);
 
       const pinnedSet = new Set(pinned);
 
-      const ownedData = await Promise.all(
-        owned.map((board) => getBoardInfo(board.objectID))
-      );
-      const sharedData = await Promise.all(
-        shared.map((board) => getBoardInfo(board.objectID))
+      const boardData = await Promise.all(
+        memberBoards.map((board) => getBoardInfo(board.objectID))
       );
 
-      const ownedWithPins = ownedData
+      const boardsWithPins = boardData
         .filter(Boolean)
         .map((b) => ({ ...b, pinned: pinnedSet.has(b.id) }));
 
-      const sharedWithPins = sharedData
-        .filter(Boolean)
-        .map((b) => ({ ...b, pinned: pinnedSet.has(b.id) }));
-
-      const pinnedData = [...ownedWithPins, ...sharedWithPins].filter(
-        (b) => b.pinned
-      );
-
-      setOwnedBoards(ownedWithPins);
-      setSharedBoards(sharedWithPins);
-      setPinnedBoards(pinnedData);
+      setBoards(boardsWithPins);
+      setPinnedBoards(boardsWithPins.filter((b) => b.pinned));
     };
 
     fetchBoards();
@@ -125,17 +111,12 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
     if (isPinned) {
       setPinnedBoards((prev) => prev.filter((b) => b.id !== id));
     } else {
-      const board =
-        ownedBoards.find((b) => b.id === id) ||
-        sharedBoards.find((b) => b.id === id);
+      const board = boards.find((b) => b.id === id);
       if (board)
         setPinnedBoards((prev) => [...prev, { ...board, pinned: true }]);
     }
 
-    setOwnedBoards((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, pinned: !isPinned } : b))
-    );
-    setSharedBoards((prev) =>
+    setBoards((prev) =>
       prev.map((b) => (b.id === id ? { ...b, pinned: !isPinned } : b))
     );
 
@@ -144,17 +125,12 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
     if (newStatus !== !isPinned) {
       console.warn("Backend disagreed, rolling back");
 
-      setOwnedBoards((prev) =>
-        prev.map((b) => (b.id === id ? { ...b, pinned: isPinned } : b))
-      );
-      setSharedBoards((prev) =>
+      setBoards((prev) =>
         prev.map((b) => (b.id === id ? { ...b, pinned: isPinned } : b))
       );
 
       if (isPinned) {
-        const board =
-          ownedBoards.find((b) => b.id === id) ||
-          sharedBoards.find((b) => b.id === id);
+        const board = boards.find((b) => b.id === id);
         if (board) setPinnedBoards((prev) => [...prev, board]);
       } else {
         setPinnedBoards((prev) => prev.filter((b) => b.id !== id));
@@ -201,7 +177,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
           const newBoard = await getBoardInfo(newBoardId);
           if (!newBoard) return;
 
-          setOwnedBoards((prev) => [...prev, { ...newBoard, pinned: false }]);
+          setBoards((prev) => [...prev, { ...newBoard, pinned: false }]);
         }}
       />
 
@@ -233,31 +209,10 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
               My Boards
             </h2>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,11rem))] gap-4">
-              {ownedBoards.length === 0 ? (
+              {boards.length === 0 ? (
                 <p className="text-gray-400">No boards yet.</p>
               ) : (
-                ownedBoards.map((board) => (
-                  <BoardCard
-                    key={board.id}
-                    board={board}
-                    togglePin={togglePinBoard}
-                    openBoard={() => user && openBoard(board.id, user, router)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="flex text-xl items-center font-semibold mb-3">
-              <Waypoints className="inline-block w-5 h-5 mr-3" />
-              Shared with You
-            </h2>
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {sharedBoards.length === 0 ? (
-                <p className="text-gray-400">No shared boards.</p>
-              ) : (
-                sharedBoards.map((board) => (
+                boards.map((board) => (
                   <BoardCard
                     key={board.id}
                     board={board}

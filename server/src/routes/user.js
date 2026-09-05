@@ -24,44 +24,27 @@ router.get("/boards", async (req, res) => {
 
     const userRef = db.collection("Users").doc(userId);
     const userSnap = await userRef.get();
-    let ownedBoardIds = [];
+    const pinned = userSnap.exists ? userSnap.data().PinnedBoards || [] : [];
 
-    if (userSnap.exists) {
-      ownedBoardIds = userSnap.data().Boards || [];
-    }
+    const boardsSnap = await db
+      .collection("Boards")
+      .where("members", "array-contains", userId)
+      .get();
 
-    let owned = [];
-    if (ownedBoardIds.length > 0) {
-      const filterString = ownedBoardIds
-        .map((id) => `objectID:${id}`)
-        .join(" OR ");
-      const ownedRes = await client.search([
-        {
-          indexName: boardIndexName,
-          query: "",
-          filters: filterString,
-          hitsPerPage: ownedBoardIds.length,
-        },
-      ]);
-      owned = ownedRes.results[0].hits;
-    }
-
-    let pinned = userSnap.exists ? userSnap.data().PinnedBoards || [] : [];
-
-    const sharedRes = await client.search([
-      {
-        indexName: boardIndexName,
-        query: "",
-        filters: `members:${userId} AND NOT ownerId:${userId}`,
-        hitsPerPage: 50,
-      },
-    ]);
-
-    const shared = sharedRes.results[0].hits;
+    const boards = boardsSnap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        objectID: doc.id,
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate
+          ? data.createdAt.toDate().toISOString()
+          : data.createdAt,
+      };
+    });
 
     res.json({
-      owned,
-      shared,
+      boards,
       pinned,
     });
   } catch (err) {

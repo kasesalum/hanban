@@ -3,7 +3,9 @@
 import BoardCard, {
   DEFAULT_BOARD_LABELS,
   LabelChip,
+  assigneeLabel,
   type BoardLabel,
+  type MemberProfile,
 } from "@/components/boards/boardCard";
 import CardDetailModal, {
   type DetailCard,
@@ -58,6 +60,7 @@ type BoardInfo = {
   urlName?: string;
   privacy?: string;
   members?: string[];
+  memberProfiles?: MemberProfile[];
   ownerId?: string;
   lists?: BoardList[];
   labels?: BoardLabel[];
@@ -159,6 +162,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const lists = board?.lists?.length ? board.lists : EMPTY_COLUMNS;
   const boardLabels = board?.labels?.length ? board.labels : DEFAULT_BOARD_LABELS;
   const members = board?.members || [];
+  const memberProfiles = board?.memberProfiles || [];
   const userName = user?.displayName?.replace(/\s+/g, "") || "unknown";
   const title = board?.name || decodeURIComponent(boardName) || "Untitled Board";
 
@@ -286,6 +290,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                     labels={boardLabels}
                     members={members}
                     currentUserId={user?.uid}
+                    memberProfiles={memberProfiles}
                     onAssigneeChange={setAssigneeFilter}
                     onLabelChange={setLabelFilter}
                   />
@@ -344,6 +349,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                           <BoardCard
                             compact
                             currentUserId={user?.uid}
+                            memberProfiles={memberProfiles}
                             listId={column.id}
                             onMove={(nextListId) =>
                               handleMove(card.id, nextListId)
@@ -404,7 +410,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                                   checked={form.assignees.includes(uid)}
                                   onChange={() => toggleAssignee(uid)}
                                 />
-                                {uid === user?.uid ? "You" : uid.slice(0, 6)}
+                                {assigneeLabel(uid, user?.uid, memberProfiles)}
                               </label>
                             ))}
                           </div>
@@ -483,6 +489,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         lists={lists}
         labels={boardLabels}
         currentUserId={user?.uid}
+        memberProfiles={memberProfiles}
         onClose={() => setOpenCard(null)}
         onMove={(listId) => {
           if (openCard) handleMove(openCard.card.id, listId);
@@ -508,13 +515,20 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         members={members}
         ownerId={board?.ownerId}
         currentUserId={user?.uid}
+        memberProfiles={memberProfiles}
         onClose={() => setMembersOpen(false)}
         onAdd={async (email) => {
-          const result = await addBoardMember(boardId, email);
+          const result = await addBoardMember(boardId, email, user?.uid);
           if (!result) return "Failed to add member";
           if ("error" in result) return result.error;
           setBoard((prev) =>
-            prev ? { ...prev, members: result.members } : prev
+            prev
+              ? {
+                  ...prev,
+                  members: result.members,
+                  memberProfiles: result.memberProfiles || prev.memberProfiles,
+                }
+              : prev
           );
           return null;
         }}
@@ -527,6 +541,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
               ? {
                   ...prev,
                   members: result.members,
+                  memberProfiles: result.memberProfiles || prev.memberProfiles,
                   lists: result.lists || prev.lists,
                 }
               : prev

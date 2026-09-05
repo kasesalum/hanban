@@ -60,8 +60,34 @@ export interface BoardCardData {
   deadline?: string;
 }
 
-export function assigneeLabel(uid: string, currentUserId?: string) {
+export type MemberProfile = {
+  uid: string;
+  displayName?: string;
+  email?: string;
+};
+
+export function toMemberProfileMap(
+  profiles?: MemberProfile[]
+): Record<string, MemberProfile> {
+  const map: Record<string, MemberProfile> = {};
+  for (const profile of profiles || []) {
+    map[profile.uid] = profile;
+  }
+  return map;
+}
+
+export function assigneeLabel(
+  uid: string,
+  currentUserId?: string,
+  profiles?: MemberProfile[] | Record<string, MemberProfile>
+) {
   if (currentUserId && uid === currentUserId) return "You";
+  const map = Array.isArray(profiles) ? toMemberProfileMap(profiles) : profiles;
+  const profile = map?.[uid];
+  const name = profile?.displayName?.trim();
+  if (name) return name;
+  const email = profile?.email?.trim();
+  if (email) return email;
   return uid.slice(0, 6);
 }
 
@@ -75,6 +101,7 @@ interface BoardCardProps {
   listId?: string;
   onMove?: (listId: string) => void;
   labels?: BoardLabel[];
+  memberProfiles?: MemberProfile[];
 }
 
 export default function BoardCard({
@@ -87,6 +114,7 @@ export default function BoardCard({
   listId,
   onMove,
   labels,
+  memberProfiles,
 }: BoardCardProps) {
   const label = findBoardLabel(labels, board.label);
   const hasMeta =
@@ -220,7 +248,7 @@ export default function BoardCard({
                     key={uid}
                     className="text-[10px] px-1.5 py-0.5 rounded-full bg-black/40 text-gray-200"
                   >
-                    {assigneeLabel(uid, currentUserId)}
+                    {assigneeLabel(uid, currentUserId, memberProfiles)}
                   </span>
                 ))}
               </div>
