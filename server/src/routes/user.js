@@ -4,6 +4,7 @@ import { db } from "../firebase.js";
 import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
 import { DEFAULT_LABELS, DEFAULT_LISTS } from "../boardLists.js";
+import { ensureFeatureBoardMember } from "../featureBoard.js";
 import { searchUsers } from "../users.js";
 
 const router = express.Router();
@@ -41,6 +42,8 @@ router.get("/boards", async (req, res) => {
     const userRef = db.collection("Users").doc(userId);
     const userSnap = await userRef.get();
     const pinned = userSnap.exists ? userSnap.data().PinnedBoards || [] : [];
+
+    await ensureFeatureBoardMember(userId);
 
     const boardsSnap = await db
       .collection("Boards")

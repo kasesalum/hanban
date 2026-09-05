@@ -62,17 +62,24 @@ export async function getUserBoards(
   }
 }
 
+export const FEATURE_BOARD_ID = "feature-requests";
+
 /** * A helper function that retrieves information about a specific board by its ID.
  * It fetches all documents from the "Boards" collection and filters them to find the one with the matching ID.
  * Returns the board data if found, or null if not found.
  *
  * @param {string} boardId - The ID of the board to retrieve.
+ * @param {string} [userId] - When opening Feature Requests, joins the current user.
  * @returns {Promise<any>} - A Promise resolving to the board data or null if not found.
  */
-export async function getBoardInfo(boardId: string): Promise<any> {
+export async function getBoardInfo(
+  boardId: string,
+  userId?: string
+): Promise<any> {
   console.log("Fetching board info for board:", boardId);
   try {
-    const res = await fetch(`${API_BASE}/api/board/${boardId}`);
+    const params = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+    const res = await fetch(`${API_BASE}/api/board/${boardId}${params}`);
 
     if (res.status === 404) {
       console.warn(`Board ${boardId} not found, removing from recentBoards`);
@@ -463,7 +470,7 @@ export async function openBoard(
   user: User,
   router: ReturnType<typeof useRouter>
 ): Promise<void> {
-  const board = await getBoardInfo(id);
+  const board = await getBoardInfo(id, user.uid);
   if (!board) return;
 
   await addRecentBoard(user.uid, id);

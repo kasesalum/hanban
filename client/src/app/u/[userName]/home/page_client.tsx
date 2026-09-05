@@ -42,7 +42,7 @@ export default function HomePage({ userName }: HomePageProps) {
       const pinnedSet = new Set(pinned);
 
       const boardData = await Promise.all(
-        boards.map((board) => getBoardInfo(board.objectID))
+        boards.map((board) => getBoardInfo(board.objectID, user.uid))
       );
 
       const boardsWithPins = boardData

@@ -11,6 +11,11 @@ import {
 } from "../boardLists.js";
 import { notifyAssigneesAdded, notifyBoardMemberAdded } from "../mailer.js";
 import { memberProfilesForUids } from "../users.js";
+import {
+  FEATURE_BOARD_ID,
+  ensureFeatureBoardMember,
+  isFeatureBoard,
+} from "../featureBoard.js";
 
 const router = express.Router();
 const algolia = algoliasearch(
@@ -501,6 +506,12 @@ router.delete("/:id/members", async (req, res) => {
     }
 
     const data = boardSnap.data();
+    if (isFeatureBoard(boardId, data)) {
+      return res.status(403).json({
+        error: "Members cannot be removed from the Feature Requests board",
+      });
+    }
+
     let memberUid = uid ? String(uid) : "";
 
     if (!memberUid && email) {
@@ -549,6 +560,10 @@ router.delete("/:id/members", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const boardId = req.params.id;
+    if (boardId === FEATURE_BOARD_ID && req.query.userId) {
+      await ensureFeatureBoardMember(String(req.query.userId));
+    }
+
     const boardRef = db.collection("Boards").doc(boardId);
     const boardSnap = await boardRef.get();
 

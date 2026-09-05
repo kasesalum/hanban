@@ -11,6 +11,7 @@ interface MembersModalProps {
   ownerId?: string;
   currentUserId?: string;
   memberProfiles?: MemberProfile[];
+  lockRemoval?: boolean;
   onClose: () => void;
   onAdd: (email: string) => Promise<string | null>;
   onRemove: (uid: string) => Promise<string | null>;
@@ -22,6 +23,7 @@ export default function MembersModal({
   ownerId,
   currentUserId,
   memberProfiles,
+  lockRemoval,
   onClose,
   onAdd,
   onRemove,
@@ -113,7 +115,7 @@ export default function MembersModal({
                 {assigneeLabel(uid, currentUserId, memberProfiles)}
                 {uid === ownerId ? " (owner)" : ""}
               </span>
-              {uid !== ownerId && (
+              {uid !== ownerId && !lockRemoval && (
                 <button
                   type="button"
                   disabled={busy}

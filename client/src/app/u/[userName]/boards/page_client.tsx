@@ -85,7 +85,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
       const pinnedSet = new Set(pinned);
 
       const boardData = await Promise.all(
-        memberBoards.map((board) => getBoardInfo(board.objectID))
+        memberBoards.map((board) => getBoardInfo(board.objectID, user.uid))
       );
 
       const boardsWithPins = boardData
@@ -174,7 +174,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
         onCreated={async (newBoardId: string) => {
           if (!user) return;
 
-          const newBoard = await getBoardInfo(newBoardId);
+          const newBoard = await getBoardInfo(newBoardId, user.uid);
           if (!newBoard) return;
 
           setBoards((prev) => [...prev, { ...newBoard, pinned: false }]);

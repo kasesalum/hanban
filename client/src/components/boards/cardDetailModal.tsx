@@ -10,7 +10,10 @@ import {
   type MemberProfile,
 } from "@/components/boards/boardCard";
 import DescriptionText from "@/components/boards/descriptionText";
-import DeadlinePicker, { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
+import DeadlinePicker, {
+  isDeadlineOverdue,
+  tomorrowISO,
+} from "@/components/boards/deadlinePicker";
 
 export type CardComment = {
   id: string;
@@ -38,6 +41,14 @@ export type DetailCard = {
   activity?: CardActivity[];
 };
 
+type CardFields = {
+  title?: string;
+  description?: string;
+  assignees?: string[];
+  label?: string;
+  deadline?: string;
+};
+
 interface CardDetailModalProps {
   open: boolean;
   card: DetailCard | null;
@@ -47,15 +58,17 @@ interface CardDetailModalProps {
   members?: string[];
   currentUserId?: string;
   memberProfiles?: MemberProfile[];
+  isNew?: boolean;
   onClose: () => void;
   onMove: (listId: string) => void;
-  onUpdate: (fields: {
-    title?: string;
+  onUpdate: (fields: CardFields) => Promise<void>;
+  onCreate?: (fields: {
+    title: string;
     description?: string;
     assignees?: string[];
     label?: string;
     deadline?: string;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   onComment: (text: string) => Promise<void>;
   onDelete: () => Promise<void>;
 }
@@ -151,14 +164,19 @@ export default function CardDetailModal({
   members = [],
   currentUserId,
   memberProfiles,
+  isNew = false,
   onClose,
   onMove,
   onUpdate,
+  onCreate,
   onComment,
   onDelete,
 }: CardDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [assignees, setAssignees] = useState<string[]>([]);
+  const [label, setLabel] = useState("");
+  const [deadline, setDeadline] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [comment, setComment] = useState("");
   const [hideDetails, setHideDetails] = useState(false);
@@ -166,17 +184,43 @@ export default function CardDetailModal({
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const membersRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
+  const creatingRef = useRef(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!card) return;
     setTitle(card.title);
     setDescription(card.description || "");
+    setAssignees(card.assignees || []);
+    setLabel(card.label || "");
+    setDeadline(card.deadline || (isNew ? tomorrowISO() : ""));
     setEditingDescription(false);
     setComment("");
     setConfirmDelete(false);
-  }, [card?.id, card?.title, card?.description]);
+    creatingRef.current = false;
+  }, [
+    card?.id,
+    card?.title,
+    card?.description,
+    card?.label,
+    card?.deadline,
+    card?.assignees?.join(","),
+    isNew,
+  ]);
+
+  useEffect(() => {
+    if (open && isNew) {
+      const frame = requestAnimationFrame(() => titleRef.current?.focus());
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [open, isNew, card?.id]);
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -210,10 +254,31 @@ export default function CardDetailModal({
     return activity;
   }, [card?.activity, hideDetails]);
 
-  if (!open || !card) return null;
+  if (!open || !card || !mounted) return null;
   const currentCard = card;
 
-  async function save(fields: Parameters<typeof onUpdate>[0]) {
+  async function save(fields: CardFields) {
+    if (fields.assignees) setAssignees(fields.assignees);
+    if (fields.label !== undefined) setLabel(fields.label);
+    if (fields.deadline !== undefined) setDeadline(fields.deadline);
+
+    if (isNew) {
+      const nextTitle = (fields.title ?? title).trim();
+      if (!nextTitle || !onCreate || creatingRef.current) return;
+      creatingRef.current = true;
+      setBusy(true);
+      const created = await onCreate({
+        title: nextTitle,
+        description: (fields.description ?? description).trim(),
+        assignees: fields.assignees ?? assignees,
+        label: fields.label ?? label,
+        deadline: fields.deadline ?? deadline,
+      });
+      if (!created) creatingRef.current = false;
+      setBusy(false);
+      return;
+    }
+
     setBusy(true);
     await onUpdate(fields);
     setBusy(false);
@@ -221,10 +286,11 @@ export default function CardDetailModal({
 
   async function handleTitleBlur() {
     const next = title.trim();
-    if (!next || next === currentCard.title) {
-      setTitle(currentCard.title);
+    if (!next) {
+      if (!isNew) setTitle(currentCard.title);
       return;
     }
+    if (!isNew && next === currentCard.title) return;
     await save({ title: next });
   }
 
@@ -237,23 +303,22 @@ export default function CardDetailModal({
   async function handleComment(event: FormEvent) {
     event.preventDefault();
     const text = comment.trim();
-    if (!text || busy) return;
+    if (!text || busy || isNew) return;
     setBusy(true);
     await onComment(text);
     setComment("");
     setBusy(false);
   }
 
-  const assignees = card.assignees || [];
-  const overdue = isDeadlineOverdue(card.deadline, listId);
+  const overdue = isDeadlineOverdue(deadline, listId);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl bg-background shadow-xl border border-border flex flex-col">
+      <div className="relative w-full max-w-4xl h-[min(46rem,94vh)] max-h-[94vh] overflow-hidden rounded-xl bg-background shadow-xl border border-border flex flex-col">
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
           <select
             value={listId}
@@ -267,43 +332,44 @@ export default function CardDetailModal({
             ))}
           </select>
           <div className="flex items-center gap-2">
-            {confirmDelete ? (
-              <>
-                <span className="text-xs text-gray-400 hidden sm:inline">
-                  Delete this card?
-                </span>
+            {!isNew &&
+              (confirmDelete ? (
+                <>
+                  <span className="text-xs text-gray-400 hidden sm:inline">
+                    Delete this card?
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      await onDelete();
+                      setBusy(false);
+                    }}
+                    className="px-2 py-1 rounded-md text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-2 py-1 rounded-md text-xs text-gray-300 hover:bg-border-hover"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    await onDelete();
-                    setBusy(false);
-                  }}
-                  className="px-2 py-1 rounded-md text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                  onClick={() => setConfirmDelete(true)}
+                  className="p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-border-hover"
+                  aria-label="Delete card"
+                  title="Delete card"
                 >
-                  Delete
+                  <Trash2 className="w-4 h-4" />
                 </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-2 py-1 rounded-md text-xs text-gray-300 hover:bg-border-hover"
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-border-hover"
-                aria-label="Delete card"
-                title="Delete card"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
+              ))}
             <button
               type="button"
               onClick={onClose}
@@ -315,7 +381,7 @@ export default function CardDetailModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="p-5 space-y-5">
             <div className="flex items-start gap-3">
               <button
@@ -332,10 +398,18 @@ export default function CardDetailModal({
                 <Check className="w-3.5 h-3.5" />
               </button>
               <input
+                ref={titleRef}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleBlur}
-                className="flex-1 text-xl font-semibold bg-transparent border-0 text-white focus:outline-none focus:ring-1 focus:ring-white/20 rounded-md px-1 py-0.5"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    (event.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="Enter a title..."
+                className="flex-1 text-xl font-semibold bg-transparent border-0 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/20 rounded-md px-1 py-0.5"
               />
             </div>
 
@@ -398,9 +472,9 @@ export default function CardDetailModal({
                 </p>
                 <div className="relative" ref={labelsRef}>
                   <div className="flex flex-wrap items-center gap-1">
-                    {card.label ? (
+                    {label ? (
                       <LabelChip
-                        labelId={card.label}
+                        labelId={label}
                         labels={labels}
                         className="text-xs px-2 py-1"
                       />
@@ -454,9 +528,9 @@ export default function CardDetailModal({
                 </p>
                 <div className="flex items-center gap-2">
                   <DeadlinePicker
-                    value={card.deadline || ""}
+                    value={deadline || ""}
                     allowClear
-                    onChange={(deadline) => save({ deadline })}
+                    onChange={(nextDeadline) => save({ deadline: nextDeadline })}
                     className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-sm ${
                       overdue
                         ? "border-red-500 text-red-400 bg-red-500/10"
@@ -497,8 +571,8 @@ export default function CardDetailModal({
                   }}
                   className="w-full text-left min-h-24 px-3 py-2 rounded-md bg-background-alt border border-border text-sm text-gray-200 whitespace-pre-wrap cursor-text"
                 >
-                  {card.description?.trim() ? (
-                    <DescriptionText text={card.description} />
+                  {description.trim() ? (
+                    <DescriptionText text={description} />
                   ) : (
                     <span className="text-gray-500">
                       Add a more detailed description...
@@ -509,7 +583,7 @@ export default function CardDetailModal({
             </div>
           </div>
 
-          <aside className="border-t md:border-t-0 md:border-l border-border p-4 bg-background-alt/40 flex flex-col gap-3">
+          <aside className="border-t md:border-t-0 md:border-l border-border p-4 bg-background-alt/40 flex flex-col gap-3 min-h-0 overflow-hidden">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
@@ -528,13 +602,16 @@ export default function CardDetailModal({
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Write a comment..."
+                placeholder={
+                  isNew ? "Add a title to comment..." : "Write a comment..."
+                }
+                disabled={isNew}
                 rows={3}
-                className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm text-gray-100 resize-none"
+                className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm text-gray-100 resize-none disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={busy || !comment.trim()}
+                disabled={isNew || busy || !comment.trim()}
                 className="mt-2 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/80 text-sm disabled:opacity-50"
               >
                 Save
@@ -583,6 +660,7 @@ export default function CardDetailModal({
           </aside>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

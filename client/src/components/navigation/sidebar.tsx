@@ -1,6 +1,6 @@
 "use client";
 
-import { getRecentBoards, getBoardInfo, openBoard, getUserNotifications } from "@/lib/helper";
+import { getRecentBoards, getBoardInfo, openBoard, getUserNotifications, FEATURE_BOARD_ID } from "@/lib/helper";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   LayoutTemplate,
   Folder,
   Home,
+  Lightbulb,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -68,6 +69,11 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
       icon: <LayoutDashboard className="w-5 h-5" />,
     },
     {
+      label: "Feature Requests",
+      href: `/b/${FEATURE_BOARD_ID}/${FEATURE_BOARD_ID}`,
+      icon: <Lightbulb className="w-5 h-5" />,
+    },
+    {
       label: "Notifications",
       href: `/u/${userName}/notifications`,
       icon: <Bell className="w-5 h-5" />,
@@ -82,7 +88,7 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
       const boardIds = await getRecentBoards(user.uid);
       const boardsData = await Promise.all(
         boardIds.map(async (id) => {
-          const info = await getBoardInfo(id);
+          const info = await getBoardInfo(id, user.uid);
           return info
             ? {
                 id,

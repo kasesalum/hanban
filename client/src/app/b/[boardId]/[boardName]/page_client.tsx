@@ -2,15 +2,13 @@
 
 import BoardCard, {
   DEFAULT_BOARD_LABELS,
-  LabelChip,
-  assigneeLabel,
   type BoardLabel,
   type MemberProfile,
 } from "@/components/boards/boardCard";
 import CardDetailModal, {
   type DetailCard,
 } from "@/components/boards/cardDetailModal";
-import DeadlinePicker, { tomorrowISO } from "@/components/boards/deadlinePicker";
+import { tomorrowISO } from "@/components/boards/deadlinePicker";
 import LabelsEditorModal from "@/components/boards/labelsEditorModal";
 import MembersModal from "@/components/boards/membersModal";
 import {
@@ -26,6 +24,7 @@ import {
   addCardComment,
   createBoardCard,
   deleteBoardCard,
+  FEATURE_BOARD_ID,
   getBoardInfo,
   moveBoardCard,
   removeBoardMember,
@@ -33,9 +32,9 @@ import {
   updateBoardLabels,
 } from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { DragEvent, FormEvent, useEffect, useState } from "react";
+import { DragEvent, useEffect, useState } from "react";
 
 interface BoardPageProps {
   boardId: string;
@@ -67,6 +66,7 @@ type BoardInfo = {
   members?: string[];
   memberProfiles?: MemberProfile[];
   ownerId?: string;
+  kind?: string;
   lists?: BoardList[];
   labels?: BoardLabel[];
   background?: {
@@ -82,13 +82,16 @@ const EMPTY_COLUMNS: BoardList[] = [
   { id: "done", title: "Done", cards: [] },
 ];
 
-function defaultForm() {
+function newDraftCard(): DetailCard {
   return {
+    id: `__new__-${crypto.randomUUID()}`,
     title: "",
     description: "",
-    assignees: [] as string[],
+    assignees: [],
     label: "",
     deadline: tomorrowISO(),
+    comments: [],
+    activity: [],
   };
 }
 
@@ -122,12 +125,10 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [user, setUser] = useState<User | null>(null);
   const [board, setBoard] = useState<BoardInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [addingListId, setAddingListId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm);
-  const [saving, setSaving] = useState(false);
   const [openCard, setOpenCard] = useState<{
     card: DetailCard;
     listId: string;
+    isNew?: boolean;
   } | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [labelFilter, setLabelFilter] = useState("");
@@ -151,7 +152,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     const fetchBoard = async () => {
       if (!user) return;
       setLoading(true);
-      const info = await getBoardInfo(boardId);
+      const info = await getBoardInfo(boardId, user.uid);
       setBoard(info);
       setLoading(false);
     };
@@ -184,15 +185,6 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     }
     if (labelFilter && card.label !== labelFilter) return false;
     return true;
-  };
-
-  const toggleAssignee = (uid: string) => {
-    setForm((prev) => ({
-      ...prev,
-      assignees: prev.assignees.includes(uid)
-        ? prev.assignees.filter((id) => id !== uid)
-        : [...prev.assignees, uid],
-    }));
   };
 
   const handleMove = async (cardId: string, listId: string) => {
@@ -235,7 +227,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     label?: string;
     deadline?: string;
   }) => {
-    if (!openCard) return;
+    if (!openCard || openCard.isNew) return;
     const result = await updateBoardCard(boardId, openCard.card.id, {
       ...fields,
       actorId: user?.uid,
@@ -244,7 +236,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   const handleComment = async (text: string) => {
-    if (!openCard) return;
+    if (!openCard || openCard.isNew) return;
     const result = await addCardComment(
       boardId,
       openCard.card.id,
@@ -255,34 +247,33 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   const handleDeleteCard = async () => {
-    if (!openCard) return;
+    if (!openCard || openCard.isNew) return;
     const result = await deleteBoardCard(boardId, openCard.card.id);
     if (!result) return;
     setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
     setOpenCard(null);
   };
 
-  const handleAddCard = async (event: FormEvent, listId: string) => {
-    event.preventDefault();
-    if (!form.title.trim() || saving) return;
-
-    setSaving(true);
-    const result = await createBoardCard(boardId, listId, {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      assignees: form.assignees,
-      label: form.label,
-      deadline: form.deadline,
-    });
-    setSaving(false);
-
-    if (!result) return;
+  const handleCreateCard = async (fields: {
+    title: string;
+    description?: string;
+    assignees?: string[];
+    label?: string;
+    deadline?: string;
+  }) => {
+    if (!openCard?.isNew) return false;
+    const result = await createBoardCard(boardId, openCard.listId, fields);
+    if (!result) return false;
 
     setBoard((prev) =>
       prev ? { ...prev, lists: result.lists } : { id: boardId, lists: result.lists }
     );
-    setForm(defaultForm());
-    setAddingListId(null);
+    setOpenCard({
+      card: result.card,
+      listId: openCard.listId,
+      isNew: false,
+    });
+    return true;
   };
 
   const handleDragStart = (event: DragEvent, cardId: string) => {
@@ -385,12 +376,11 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                       {column.title}
                     </h2>
                     <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
-                      {visibleCards.length === 0 &&
-                        addingListId !== column.id && (
-                          <p className="px-1 text-sm text-gray-400">
-                            No cards yet
-                          </p>
-                        )}
+                      {visibleCards.length === 0 && (
+                        <p className="px-1 text-sm text-gray-400">
+                          No cards yet
+                        </p>
+                      )}
                       {visibleCards.map((card) => (
                         <div
                           key={card.id}
@@ -422,110 +412,24 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                       ))}
                     </div>
 
-                    {addingListId === column.id ? (
-                      <form
-                        onSubmit={(event) => handleAddCard(event, column.id)}
-                        className="mx-3 mb-3 p-3 rounded-lg bg-background-alt border border-border space-y-2 text-sm"
-                      >
-                        <input
-                          value={form.title}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, title: e.target.value }))
-                          }
-                          placeholder="Card title"
-                          required
-                          className="w-full px-3 py-2 rounded-md bg-background border border-border text-gray-100"
-                        />
-                        <textarea
-                          value={form.description}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              description: e.target.value,
-                            }))
-                          }
-                          placeholder="Description"
-                          rows={2}
-                          className="w-full px-3 py-2 rounded-md bg-background border border-border text-gray-100 resize-none"
-                        />
-                        <div>
-                          <p className="mb-1 text-xs text-gray-400">Assignees</p>
-                          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
-                            {members.map((uid) => (
-                              <label
-                                key={uid}
-                                className="flex items-center gap-2 text-xs text-gray-200"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={form.assignees.includes(uid)}
-                                  onChange={() => toggleAssignee(uid)}
-                                />
-                                {assigneeLabel(uid, user?.uid, memberProfiles)}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={form.label}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                label: e.target.value,
-                              }))
-                            }
-                            className="flex-1 px-2 py-2 rounded-md bg-background border border-border text-gray-100"
-                          >
-                            <option value="">No label</option>
-                            {boardLabels.map((label) => (
-                              <option key={label.id} value={label.id}>
-                                {label.name}
-                              </option>
-                            ))}
-                          </select>
-                          <LabelChip labelId={form.label} labels={boardLabels} />
-                        </div>
-                        <DeadlinePicker
-                          value={form.deadline}
-                          onChange={(deadline) =>
-                            setForm((prev) => ({ ...prev, deadline }))
-                          }
-                        />
-                        <div className="flex justify-between pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddingListId(null);
-                              setForm(defaultForm());
-                            }}
-                            className="flex items-center gap-1 px-2 py-1 text-gray-400 hover:text-white"
-                          >
-                            <X className="w-4 h-4" />
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={!form.title.trim() || saving}
-                            className="px-3 py-1 rounded-md bg-accent hover:bg-accent/80 disabled:opacity-50"
-                          >
-                            {saving ? "Adding…" : "Add card"}
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAddingListId(column.id);
-                          setForm(defaultForm());
-                        }}
-                        className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add a card
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenCard((prev) =>
+                          prev?.isNew
+                            ? { ...prev, listId: column.id }
+                            : {
+                                card: newDraftCard(),
+                                listId: column.id,
+                                isNew: true,
+                              }
+                        );
+                      }}
+                      className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add a card
+                    </button>
                   </section>
                 );
               })}
@@ -542,11 +446,17 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         members={members}
         currentUserId={user?.uid}
         memberProfiles={memberProfiles}
+        isNew={Boolean(openCard?.isNew)}
         onClose={() => setOpenCard(null)}
         onMove={(listId) => {
+          if (openCard?.isNew) {
+            setOpenCard((prev) => (prev ? { ...prev, listId } : prev));
+            return;
+          }
           if (openCard) handleMove(openCard.card.id, listId);
         }}
         onUpdate={handleUpdateCard}
+        onCreate={handleCreateCard}
         onComment={handleComment}
         onDelete={handleDeleteCard}
       />
@@ -571,6 +481,9 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         ownerId={board?.ownerId}
         currentUserId={user?.uid}
         memberProfiles={memberProfiles}
+        lockRemoval={
+          boardId === FEATURE_BOARD_ID || board?.kind === "feature-requests"
+        }
         onClose={() => setMembersOpen(false)}
         onAdd={async (email) => {
           const result = await addBoardMember(boardId, email, user?.uid);
