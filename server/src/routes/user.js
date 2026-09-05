@@ -4,6 +4,7 @@ import { db } from "../firebase.js";
 import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
 import { DEFAULT_LABELS, DEFAULT_LISTS } from "../boardLists.js";
+import { searchUsers } from "../users.js";
 
 const router = express.Router();
 
@@ -12,6 +13,21 @@ const client = algoliasearch(
   process.env.ALGOLIA_WRITE_API_KEY
 );
 const boardIndexName = "boards";
+
+// GET /api/user/search?q=
+router.get("/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) {
+      return res.json({ users: [] });
+    }
+    const users = await searchUsers(q);
+    res.json({ users });
+  } catch (err) {
+    console.error("Error searching users:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // GET /api/user/boards?userId=123
 router.get("/boards", async (req, res) => {

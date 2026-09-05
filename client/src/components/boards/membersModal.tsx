@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { assigneeLabel, type MemberProfile } from "@/components/boards/boardCard";
+import { isValidEmail, searchUsers, type SearchUser } from "@/lib/helper";
 
 interface MembersModalProps {
   open: boolean;
@@ -25,13 +26,19 @@ export default function MembersModal({
   onAdd,
   onRemove,
 }: MembersModalProps) {
-  const [email, setEmail] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [alreadyMember, setAlreadyMember] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setEmail("");
+      setQuery("");
+      setResults([]);
+      setSearching(false);
+      setAlreadyMember(false);
       setError("");
     }
   }, [open]);
@@ -44,7 +51,44 @@ export default function MembersModal({
     return () => document.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setSearching(false);
+      setAlreadyMember(false);
+      return;
+    }
+
+    setSearching(true);
+    const handle = setTimeout(async () => {
+      const users = await searchUsers(q);
+      const available = users.filter((user) => !members.includes(user.uid));
+      setResults(available);
+      setAlreadyMember(users.length > 0 && available.length === 0);
+      setSearching(false);
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [query, open, members]);
+
+  async function addEmail(email: string) {
+    if (!email || busy) return;
+    setBusy(true);
+    const message = await onAdd(email);
+    setError(message || "");
+    if (!message) {
+      setQuery("");
+      setResults([]);
+      setAlreadyMember(false);
+    }
+    setBusy(false);
+  }
+
   if (!open) return null;
+
+  const showDropdown = query.trim().length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -88,32 +132,75 @@ export default function MembersModal({
           ))}
         </ul>
         <form
-          className="flex gap-2"
+          className="relative space-y-2"
           onSubmit={async (event) => {
             event.preventDefault();
-            if (!email.trim() || busy) return;
-            setBusy(true);
-            const message = await onAdd(email.trim());
-            setError(message || "");
-            if (!message) setEmail("");
-            setBusy(false);
+            const value = query.trim();
+            if (!value || busy) return;
+            if (results.length === 1 && results[0].email) {
+              await addEmail(results[0].email);
+              return;
+            }
+            if (isValidEmail(value)) {
+              await addEmail(value);
+              return;
+            }
+            setError("Select a user or enter an email");
           }}
         >
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Add by email"
-            required
-            className="flex-1 px-3 py-2 rounded-md bg-background-alt border border-border"
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="px-3 py-2 rounded-md bg-accent hover:bg-accent/80 disabled:opacity-50"
-          >
-            Add
-          </button>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setError("");
+              }}
+              placeholder="Search by name or email"
+              autoComplete="off"
+              className="flex-1 px-3 py-2 rounded-md bg-background-alt border border-border"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="px-3 py-2 rounded-md bg-accent hover:bg-accent/80 disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
+          {showDropdown && (
+            <div className="absolute left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background-alt shadow-lg">
+              {searching ? (
+                <p className="px-3 py-2 text-sm text-gray-400">Searching…</p>
+              ) : results.length > 0 ? (
+                <ul>
+                  {results.map((user) => (
+                    <li key={user.uid}>
+                      <button
+                        type="button"
+                        disabled={busy || !user.email}
+                        onClick={() => addEmail(user.email)}
+                        className="w-full px-3 py-2 text-left hover:bg-border-hover disabled:opacity-50"
+                      >
+                        <p className="text-sm text-white truncate">
+                          {user.displayName?.trim() || user.email}
+                        </p>
+                        {user.displayName?.trim() && (
+                          <p className="text-xs text-gray-400 truncate">
+                            {user.email}
+                          </p>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-3 py-2 text-sm text-gray-400">
+                  {alreadyMember ? "Already a member" : "No users found"}
+                </p>
+              )}
+            </div>
+          )}
         </form>
         {error && <p className="text-sm text-red-400">{error}</p>}
       </div>

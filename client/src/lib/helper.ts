@@ -296,6 +296,29 @@ export type MemberProfile = {
   email?: string;
 };
 
+export type SearchUser = {
+  uid: string;
+  displayName?: string;
+  email: string;
+  photoURL?: string;
+};
+
+export async function searchUsers(query: string): Promise<SearchUser[]> {
+  const q = query.trim();
+  if (!q) return [];
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/user/search?q=${encodeURIComponent(q)}`
+    );
+    if (!res.ok) throw new Error("Failed to search users");
+    const data = await res.json();
+    return data.users || [];
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
 export async function addBoardMember(
   boardId: string,
   email: string,

@@ -1,5 +1,59 @@
 import admin from "firebase-admin";
 
+const USER_CACHE_TTL_MS = 60_000;
+let cachedUsers = [];
+let cachedAt = 0;
+let cacheValid = false;
+
+function toSearchUser(user) {
+  return {
+    uid: user.uid,
+    displayName: user.displayName || "",
+    email: user.email || "",
+    photoURL: user.photoURL || "",
+  };
+}
+
+async function listAuthUsers() {
+  const now = Date.now();
+  if (cacheValid && now - cachedAt < USER_CACHE_TTL_MS) {
+    return cachedUsers;
+  }
+
+  const users = [];
+  let pageToken;
+  do {
+    const result = await admin.auth().listUsers(1000, pageToken);
+    for (const user of result.users) {
+      if (!user.email) continue;
+      users.push(toSearchUser(user));
+    }
+    pageToken = result.pageToken;
+  } while (pageToken);
+
+  cachedUsers = users;
+  cachedAt = now;
+  cacheValid = true;
+  return users;
+}
+
+export async function searchUsers(query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+
+  const users = await listAuthUsers();
+  const matches = [];
+  for (const user of users) {
+    const name = user.displayName.toLowerCase();
+    const email = user.email.toLowerCase();
+    if (name.includes(q) || email.includes(q)) {
+      matches.push(user);
+      if (matches.length >= 8) break;
+    }
+  }
+  return matches;
+}
+
 export async function memberProfilesForUids(uids = []) {
   const unique = [...new Set((uids || []).filter(Boolean))];
   if (unique.length === 0) return [];
