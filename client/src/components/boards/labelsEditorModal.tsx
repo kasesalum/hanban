@@ -6,13 +6,25 @@ import type { BoardLabel } from "@/components/boards/boardCard";
 
 const SWATCHES = [
   "#ef4444",
+  "#f97316",
   "#f59e0b",
+  "#eab308",
+  "#84cc16",
   "#22c55e",
-  "#3b82f6",
-  "#a855f7",
-  "#ec4899",
+  "#10b981",
+  "#14b8a6",
   "#06b6d4",
+  "#0ea5e9",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#a855f7",
+  "#d946ef",
+  "#ec4899",
+  "#f43f5e",
+  "#78716c",
   "#6b7280",
+  "#e5e7eb",
 ];
 
 interface LabelsEditorModalProps {
@@ -60,19 +72,41 @@ export default function LabelsEditorModal({
         <h2 className="text-xl font-semibold pr-8">Labels</h2>
         <div className="space-y-3 max-h-80 overflow-y-auto">
           {draft.map((label, index) => (
-            <div key={label.id} className="flex items-center gap-2">
-              <input
-                value={label.name}
-                onChange={(e) =>
-                  setDraft((prev) =>
-                    prev.map((item, i) =>
-                      i === index ? { ...item, name: e.target.value } : item
+            <div key={label.id} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  value={label.name}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev.map((item, i) =>
+                        i === index ? { ...item, name: e.target.value } : item
+                      )
                     )
-                  )
-                }
-                className="flex-1 px-3 py-2 rounded-md bg-background-alt border border-border"
-              />
-              <div className="flex gap-1">
+                  }
+                  className="flex-1 px-3 py-2 rounded-md bg-background-alt border border-border"
+                />
+                <input
+                  value={label.color}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev.map((item, i) =>
+                        i === index ? { ...item, color: e.target.value } : item
+                      )
+                    )
+                  }
+                  className="w-24 px-2 py-2 rounded-md bg-background-alt border border-border text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft((prev) => prev.filter((_, i) => i !== index))
+                  }
+                  className="text-red-400 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
                 {SWATCHES.map((color) => (
                   <button
                     key={color}
@@ -85,33 +119,15 @@ export default function LabelsEditorModal({
                       )
                     }
                     className={`size-5 rounded-full border ${
-                      label.color === color ? "border-white" : "border-transparent"
+                      label.color === color
+                        ? "border-white ring-1 ring-white/80"
+                        : "border-black/40"
                     }`}
                     style={{ backgroundColor: color }}
                     aria-label={color}
                   />
                 ))}
               </div>
-              <input
-                value={label.color}
-                onChange={(e) =>
-                  setDraft((prev) =>
-                    prev.map((item, i) =>
-                      i === index ? { ...item, color: e.target.value } : item
-                    )
-                  )
-                }
-                className="w-24 px-2 py-2 rounded-md bg-background-alt border border-border text-xs"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setDraft((prev) => prev.filter((_, i) => i !== index))
-                }
-                className="text-red-400 text-sm"
-              >
-                Delete
-              </button>
             </div>
           ))}
         </div>

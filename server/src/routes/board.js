@@ -37,6 +37,34 @@ function cloneLists(data) {
   }));
 }
 
+function withCardCollections(card) {
+  return {
+    ...card,
+    comments: Array.isArray(card.comments) ? card.comments : [],
+    activity: Array.isArray(card.activity) ? card.activity : [],
+  };
+}
+
+function activityEntry(userId, type, text) {
+  return {
+    id: randomUUID(),
+    userId: userId || "",
+    type,
+    text,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function findCard(lists, cardId) {
+  for (const list of lists) {
+    const index = list.cards.findIndex((item) => item.id === cardId);
+    if (index !== -1) {
+      return { list, index, card: list.cards[index] };
+    }
+  }
+  return null;
+}
+
 // POST /api/board/:id/cards
 router.post("/:id/cards", async (req, res) => {
   try {
@@ -80,6 +108,8 @@ router.post("/:id/cards", async (req, res) => {
       assignees: assigneeIds,
       label: label || "",
       deadline: deadline ? String(deadline) : "",
+      comments: [],
+      activity: [],
     };
 
     list.cards.push(card);
@@ -107,44 +137,223 @@ router.post("/:id/cards", async (req, res) => {
 router.patch("/:id/cards/:cardId", async (req, res) => {
   try {
     const { id: boardId, cardId } = req.params;
-    const { listId } = req.body;
+    const { listId, title, description, assignees, label, deadline, actorId } =
+      req.body || {};
+    const actor = String(actorId || "");
 
-    if (!listId) {
-      return res.status(400).json({ error: "Missing listId" });
+    const hasList = typeof listId === "string" && listId.length > 0;
+    const hasTitle = typeof title === "string";
+    const hasDescription = typeof description === "string";
+    const hasAssignees = Array.isArray(assignees);
+    const hasLabel = typeof label === "string";
+    const hasDeadline = typeof deadline === "string";
+
+    if (
+      !hasList &&
+      !hasTitle &&
+      !hasDescription &&
+      !hasAssignees &&
+      !hasLabel &&
+      !hasDeadline
+    ) {
+      return res.status(400).json({ error: "Missing fields" });
     }
 
     const boardRef = db.collection("Boards").doc(boardId);
     const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
 
+    const boardData = boardSnap.data();
+    const members = boardData.members || [];
+    const labels = withDefaultLabels(boardData);
+    const lists = cloneLists(boardData);
+    const found = findCard(lists, cardId);
+    if (!found) {
+      return res.status(404).json({ error: "Card not found" });
+    }
+
+    let card = withCardCollections(found.card);
+    const activity = [...card.activity];
+
+    if (hasTitle) {
+      const next = String(title).trim().substring(0, 120);
+      if (!next) {
+        return res.status(400).json({ error: "Title cannot be empty" });
+      }
+      if (next !== card.title) {
+        activity.push(
+          activityEntry(actor, "title", `renamed this card to “${next}”`)
+        );
+        card.title = next;
+      }
+    }
+
+    if (hasDescription) {
+      const next = String(description).trim();
+      if (next !== (card.description || "")) {
+        activity.push(
+          activityEntry(
+            actor,
+            "description",
+            next ? "updated the description" : "removed the description"
+          )
+        );
+        card.description = next;
+      }
+    }
+
+    let addedAssignees = [];
+    if (hasAssignees) {
+      const assigneeIds = assignees.map((uid) => String(uid));
+      if (assigneeIds.some((uid) => !members.includes(uid))) {
+        return res.status(400).json({ error: "Invalid assignee" });
+      }
+      const prev = card.assignees || [];
+      addedAssignees = assigneeIds.filter((uid) => !prev.includes(uid));
+      const removed = prev.filter((uid) => !assigneeIds.includes(uid));
+      if (addedAssignees.length || removed.length) {
+        const bits = [];
+        if (addedAssignees.length) {
+          bits.push(
+            `added ${addedAssignees.length} member${
+              addedAssignees.length === 1 ? "" : "s"
+            }`
+          );
+        }
+        if (removed.length) {
+          bits.push(
+            `removed ${removed.length} member${removed.length === 1 ? "" : "s"}`
+          );
+        }
+        activity.push(activityEntry(actor, "assignees", bits.join(" and ")));
+        card.assignees = assigneeIds;
+      }
+    }
+
+    if (hasLabel) {
+      const next = String(label);
+      if (next && !labels.some((item) => item.id === next)) {
+        return res.status(400).json({ error: "Invalid label" });
+      }
+      if (next !== (card.label || "")) {
+        const labelName =
+          labels.find((item) => item.id === next)?.name || "none";
+        activity.push(
+          activityEntry(
+            actor,
+            "label",
+            next ? `set the label to “${labelName}”` : "removed the label"
+          )
+        );
+        card.label = next;
+      }
+    }
+
+    if (hasDeadline) {
+      const next = String(deadline);
+      if (next !== (card.deadline || "")) {
+        activity.push(
+          activityEntry(
+            actor,
+            "deadline",
+            next ? `changed the due date to ${next}` : "removed the due date"
+          )
+        );
+        card.deadline = next;
+        delete card.notifiedApproaching;
+        delete card.notifiedOverdue;
+      }
+    }
+
+    if (hasList) {
+      const target = lists.find((item) => item.id === listId);
+      if (!target) {
+        return res.status(400).json({ error: "List not found" });
+      }
+      if (listId !== found.list.id) {
+        const type = listId === "done" ? "complete" : "list";
+        const text =
+          listId === "done"
+            ? "marked this card complete"
+            : found.list.id === "done"
+              ? `moved this card to ${target.title}`
+              : `moved this card to ${target.title}`;
+        activity.push(activityEntry(actor, type, text));
+      }
+    }
+
+    card.activity = activity;
+    found.list.cards[found.index] = card;
+
+    if (hasList && listId !== found.list.id) {
+      const [moved] = found.list.cards.splice(found.index, 1);
+      lists.find((item) => item.id === listId).cards.push(moved);
+      card = moved;
+    }
+
+    await boardRef.set({ lists }, { merge: true });
+
+    if (addedAssignees.length > 0) {
+      notifyAssigneesAdded({
+        boardId,
+        boardName: boardData.name || "Untitled board",
+        urlName: boardData.urlName,
+        card: { ...card, assignees: addedAssignees },
+      }).catch((err) => {
+        console.error("Error sending assignee notification:", err);
+      });
+    }
+
+    res.json({ card, lists });
+  } catch (error) {
+    console.error("Error updating card:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/board/:id/cards/:cardId/comments
+router.post("/:id/cards/:cardId/comments", async (req, res) => {
+  try {
+    const { id: boardId, cardId } = req.params;
+    const text = String(req.body?.text || "").trim().substring(0, 2000);
+    const actorId = String(req.body?.actorId || "");
+    if (!text) {
+      return res.status(400).json({ error: "Missing text" });
+    }
+
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
     if (!boardSnap.exists) {
       return res.status(404).json({ error: "Board not found" });
     }
 
     const lists = cloneLists(boardSnap.data());
-    const target = lists.find((item) => item.id === listId);
-    if (!target) {
-      return res.status(400).json({ error: "List not found" });
-    }
-
-    let card = null;
-    for (const list of lists) {
-      const index = list.cards.findIndex((item) => item.id === cardId);
-      if (index !== -1) {
-        [card] = list.cards.splice(index, 1);
-        break;
-      }
-    }
-
-    if (!card) {
+    const found = findCard(lists, cardId);
+    if (!found) {
       return res.status(404).json({ error: "Card not found" });
     }
 
-    target.cards.push(card);
-    await boardRef.set({ lists }, { merge: true });
+    const card = withCardCollections(found.card);
+    const createdAt = new Date().toISOString();
+    const comment = {
+      id: randomUUID(),
+      userId: actorId,
+      text,
+      createdAt,
+    };
+    card.comments = [...card.comments, comment];
+    card.activity = [
+      ...card.activity,
+      activityEntry(actorId, "comment", text),
+    ];
+    found.list.cards[found.index] = card;
 
+    await boardRef.set({ lists }, { merge: true });
     res.json({ card, lists });
   } catch (error) {
-    console.error("Error moving card:", error);
+    console.error("Error adding comment:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

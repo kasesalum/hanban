@@ -1,6 +1,7 @@
 "use client";
 
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
+import DescriptionText from "@/components/boards/descriptionText";
 import { Star } from "lucide-react";
 
 export type BoardLabel = {
@@ -64,6 +65,7 @@ export type MemberProfile = {
   uid: string;
   displayName?: string;
   email?: string;
+  photoURL?: string;
 };
 
 export function toMemberProfileMap(
@@ -222,7 +224,7 @@ export default function BoardCard({
           <div className="space-y-1.5 pb-1">
             {!compact && board.description && (
               <p className="text-xs text-gray-400 line-clamp-2">
-                {board.description}
+                <DescriptionText text={board.description} />
               </p>
             )}
             <div className="flex flex-wrap gap-1">

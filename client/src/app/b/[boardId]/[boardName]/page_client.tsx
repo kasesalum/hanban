@@ -23,10 +23,12 @@ import PageHeader from "@/components/navigation/pageHeader";
 import { auth } from "@/lib/firebase";
 import {
   addBoardMember,
+  addCardComment,
   createBoardCard,
   getBoardInfo,
   moveBoardCard,
   removeBoardMember,
+  updateBoardCard,
   updateBoardLabels,
 } from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
@@ -46,6 +48,8 @@ type TaskCard = {
   assignees?: string[];
   label?: string;
   deadline?: string;
+  comments?: DetailCard["comments"];
+  activity?: DetailCard["activity"];
 };
 
 type BoardList = {
@@ -203,12 +207,50 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
       setOpenCard((prev) => (prev ? { ...prev, listId } : prev));
     }
 
-    const result = await moveBoardCard(boardId, cardId, listId);
+    const result = await moveBoardCard(boardId, cardId, listId, user?.uid);
     if (!result) {
       setBoard((prev) => (prev ? { ...prev, lists: previous } : prev));
       return;
     }
+    applyCardResult(result);
+  };
+
+  const applyCardResult = (result: { card: any; lists: any[] }) => {
     setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    const nextListId = result.lists.find((list: BoardList) =>
+      (list.cards || []).some((item) => item.id === result.card.id)
+    )?.id;
+    setOpenCard((prev) =>
+      prev && prev.card.id === result.card.id
+        ? { card: result.card, listId: nextListId || prev.listId }
+        : prev
+    );
+  };
+
+  const handleUpdateCard = async (fields: {
+    title?: string;
+    description?: string;
+    assignees?: string[];
+    label?: string;
+    deadline?: string;
+  }) => {
+    if (!openCard) return;
+    const result = await updateBoardCard(boardId, openCard.card.id, {
+      ...fields,
+      actorId: user?.uid,
+    });
+    if (result) applyCardResult(result);
+  };
+
+  const handleComment = async (text: string) => {
+    if (!openCard) return;
+    const result = await addCardComment(
+      boardId,
+      openCard.card.id,
+      text,
+      user?.uid
+    );
+    if (result) applyCardResult(result);
   };
 
   const handleAddCard = async (event: FormEvent, listId: string) => {
@@ -488,12 +530,15 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         listId={openCard?.listId || ""}
         lists={lists}
         labels={boardLabels}
+        members={members}
         currentUserId={user?.uid}
         memberProfiles={memberProfiles}
         onClose={() => setOpenCard(null)}
         onMove={(listId) => {
           if (openCard) handleMove(openCard.card.id, listId);
         }}
+        onUpdate={handleUpdateCard}
+        onComment={handleComment}
       />
       <LabelsEditorModal
         open={labelsOpen}

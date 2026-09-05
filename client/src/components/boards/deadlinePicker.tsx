@@ -42,9 +42,16 @@ function formatLabel(value: string) {
 interface DeadlinePickerProps {
   value: string;
   onChange: (value: string) => void;
+  className?: string;
+  allowClear?: boolean;
 }
 
-export default function DeadlinePicker({ value, onChange }: DeadlinePickerProps) {
+export default function DeadlinePicker({
+  value,
+  onChange,
+  className,
+  allowClear,
+}: DeadlinePickerProps) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(() =>
     value ? parseISO(value) : parseISO(tomorrowISO())
@@ -106,13 +113,16 @@ export default function DeadlinePicker({ value, onChange }: DeadlinePickerProps)
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-background border border-border text-gray-100"
+        className={
+          className ||
+          "w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-background border border-border text-gray-100"
+        }
       >
         <span>{formatLabel(value)}</span>
         <Calendar className="w-4 h-4 text-gray-400" />
       </button>
       {open && (
-        <div className="absolute z-20 mt-2 w-full rounded-lg border border-border bg-background-alt p-3 shadow-xl">
+        <div className="absolute z-30 mt-2 w-72 rounded-lg border border-border bg-background-alt p-3 shadow-xl">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"
@@ -136,12 +146,12 @@ export default function DeadlinePicker({ value, onChange }: DeadlinePickerProps)
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <div className="grid grid-cols-7 gap-1 mb-1 text-[10px] text-gray-400 text-center">
+          <div className="grid grid-cols-7 gap-1.5 mb-1.5 text-[11px] text-gray-400 text-center">
             {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
               <span key={day}>{day}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1.5">
             {days.map((cell) => {
               const selected = cell.iso === value;
               return (
@@ -152,7 +162,7 @@ export default function DeadlinePicker({ value, onChange }: DeadlinePickerProps)
                     onChange(cell.iso);
                     setOpen(false);
                   }}
-                  className={`h-7 rounded text-xs ${
+                  className={`h-8 rounded text-sm ${
                     selected
                       ? "bg-indigo-500 text-white"
                       : cell.inMonth
@@ -165,6 +175,18 @@ export default function DeadlinePicker({ value, onChange }: DeadlinePickerProps)
               );
             })}
           </div>
+          {allowClear && value && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="mt-2 w-full text-xs text-gray-400 hover:text-white"
+            >
+              Remove due date
+            </button>
+          )}
         </div>
       )}
     </div>

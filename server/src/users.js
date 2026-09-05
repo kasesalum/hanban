@@ -71,6 +71,7 @@ export async function memberProfilesForUids(uids = []) {
           uid: user.uid,
           displayName: user.displayName || "",
           email: user.email || "",
+          photoURL: user.photoURL || "",
         });
       }
     } catch (error) {

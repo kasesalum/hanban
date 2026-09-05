@@ -294,6 +294,7 @@ export type MemberProfile = {
   uid: string;
   displayName?: string;
   email?: string;
+  photoURL?: string;
 };
 
 export type SearchUser = {
@@ -369,7 +370,8 @@ export async function removeBoardMember(
 export async function moveBoardCard(
   boardId: string,
   cardId: string,
-  listId: string
+  listId: string,
+  actorId?: string
 ): Promise<{ card: any; lists: any[] } | null> {
   try {
     const res = await fetch(`${API_BASE}/api/board/${boardId}/cards/${cardId}`, {
@@ -377,10 +379,62 @@ export async function moveBoardCard(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ listId }),
+      body: JSON.stringify({ listId, actorId }),
     });
 
     if (!res.ok) throw new Error("Failed to move card");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export type CardUpdateFields = {
+  title?: string;
+  description?: string;
+  assignees?: string[];
+  label?: string;
+  deadline?: string;
+  listId?: string;
+  actorId?: string;
+};
+
+export async function updateBoardCard(
+  boardId: string,
+  cardId: string,
+  fields: CardUpdateFields
+): Promise<{ card: any; lists: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/cards/${cardId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error("Failed to update card");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export async function addCardComment(
+  boardId: string,
+  cardId: string,
+  text: string,
+  actorId?: string
+): Promise<{ card: any; lists: any[] } | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/board/${boardId}/cards/${cardId}/comments`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, actorId }),
+      }
+    );
+    if (!res.ok) throw new Error("Failed to add comment");
     return await res.json();
   } catch (err) {
     console.error(err);
