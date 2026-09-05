@@ -358,6 +358,31 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
   }
 });
 
+// DELETE /api/board/:id/cards/:cardId
+router.delete("/:id/cards/:cardId", async (req, res) => {
+  try {
+    const { id: boardId, cardId } = req.params;
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const lists = cloneLists(boardSnap.data());
+    const found = findCard(lists, cardId);
+    if (!found) {
+      return res.status(404).json({ error: "Card not found" });
+    }
+
+    found.list.cards.splice(found.index, 1);
+    await boardRef.set({ lists }, { merge: true });
+    res.json({ lists });
+  } catch (error) {
+    console.error("Error deleting card:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // PUT /api/board/:id/labels
 router.put("/:id/labels", async (req, res) => {
   try {

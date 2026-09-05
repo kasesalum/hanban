@@ -442,6 +442,22 @@ export async function addCardComment(
   }
 }
 
+export async function deleteBoardCard(
+  boardId: string,
+  cardId: string
+): Promise<{ lists: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/cards/${cardId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete card");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 export async function openBoard(
   id: string,
   user: User,

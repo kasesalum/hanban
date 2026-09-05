@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, MessageSquare, Plus, X } from "lucide-react";
+import { Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
 import {
   LabelChip,
   assigneeLabel,
@@ -57,6 +57,7 @@ interface CardDetailModalProps {
     deadline?: string;
   }) => Promise<void>;
   onComment: (text: string) => Promise<void>;
+  onDelete: () => Promise<void>;
 }
 
 function formatTime(value: string) {
@@ -154,6 +155,7 @@ export default function CardDetailModal({
   onMove,
   onUpdate,
   onComment,
+  onDelete,
 }: CardDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -163,6 +165,7 @@ export default function CardDetailModal({
   const [membersOpen, setMembersOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const membersRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
 
@@ -172,6 +175,7 @@ export default function CardDetailModal({
     setDescription(card.description || "");
     setEditingDescription(false);
     setComment("");
+    setConfirmDelete(false);
   }, [card?.id, card?.title, card?.description]);
 
   useEffect(() => {
@@ -207,6 +211,7 @@ export default function CardDetailModal({
   }, [card?.activity, hideDetails]);
 
   if (!open || !card) return null;
+  const currentCard = card;
 
   async function save(fields: Parameters<typeof onUpdate>[0]) {
     setBusy(true);
@@ -216,8 +221,8 @@ export default function CardDetailModal({
 
   async function handleTitleBlur() {
     const next = title.trim();
-    if (!next || next === card.title) {
-      setTitle(card.title);
+    if (!next || next === currentCard.title) {
+      setTitle(currentCard.title);
       return;
     }
     await save({ title: next });
@@ -225,7 +230,7 @@ export default function CardDetailModal({
 
   async function handleDescriptionBlur() {
     setEditingDescription(false);
-    if ((description.trim() || "") === (card.description || "")) return;
+    if ((description.trim() || "") === (currentCard.description || "")) return;
     await save({ description: description.trim() });
   }
 
@@ -261,14 +266,53 @@ export default function CardDetailModal({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {confirmDelete ? (
+              <>
+                <span className="text-xs text-gray-400 hidden sm:inline">
+                  Delete this card?
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    await onDelete();
+                    setBusy(false);
+                  }}
+                  className="px-2 py-1 rounded-md text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2 py-1 rounded-md text-xs text-gray-300 hover:bg-border-hover"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-border-hover"
+                aria-label="Delete card"
+                title="Delete card"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-white"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]">

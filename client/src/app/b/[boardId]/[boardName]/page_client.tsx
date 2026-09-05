@@ -25,6 +25,7 @@ import {
   addBoardMember,
   addCardComment,
   createBoardCard,
+  deleteBoardCard,
   getBoardInfo,
   moveBoardCard,
   removeBoardMember,
@@ -251,6 +252,14 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
       user?.uid
     );
     if (result) applyCardResult(result);
+  };
+
+  const handleDeleteCard = async () => {
+    if (!openCard) return;
+    const result = await deleteBoardCard(boardId, openCard.card.id);
+    if (!result) return;
+    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    setOpenCard(null);
   };
 
   const handleAddCard = async (event: FormEvent, listId: string) => {
@@ -539,6 +548,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         }}
         onUpdate={handleUpdateCard}
         onComment={handleComment}
+        onDelete={handleDeleteCard}
       />
       <LabelsEditorModal
         open={labelsOpen}
