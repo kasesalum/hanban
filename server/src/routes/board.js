@@ -667,6 +667,37 @@ router.delete("/:id/members", async (req, res) => {
   }
 });
 
+const MAX_BOARD_INFO = 2000;
+
+// PATCH /api/board/:id
+router.patch("/:id", async (req, res) => {
+  try {
+    const boardId = req.params.id;
+    if (typeof req.body?.info !== "string") {
+      return res.status(400).json({ error: "Missing info" });
+    }
+
+    const info = String(req.body.info).trim().substring(0, MAX_BOARD_INFO);
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    if (isFeatureBoard(boardId, boardSnap.data())) {
+      return res.status(403).json({
+        error: "Feature Requests info cannot be edited",
+      });
+    }
+
+    await boardRef.set({ info }, { merge: true });
+    res.json({ info });
+  } catch (error) {
+    console.error("Error updating board info:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/board/:id
 router.get("/:id", async (req, res) => {
   try {

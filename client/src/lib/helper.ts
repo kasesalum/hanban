@@ -65,6 +65,14 @@ export async function getUserBoards(
 
 export const FEATURE_BOARD_ID = "feature-requests";
 
+export const FEATURE_BOARD_INFO = [
+  "Search existing cards before posting.",
+  "One request per card.",
+  "Use a clear title and description (problem + why it matters).",
+  "Add a label (Feature / Bug / Idea).",
+  "Comment on duplicates instead of creating a new card.",
+].join("\n");
+
 /** * A helper function that retrieves information about a specific board by its ID.
  * It fetches all documents from the "Boards" collection and filters them to find the one with the matching ID.
  * Returns the board data if found, or null if not found.
@@ -297,6 +305,25 @@ export async function updateBoardLabels(
   } catch (err) {
     console.error(err);
     return null;
+  }
+}
+
+export async function updateBoardInfo(
+  boardId: string,
+  info: string
+): Promise<{ info: string } | { error: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ info }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Failed to update board info" };
+    return data;
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to update board info" };
   }
 }
 

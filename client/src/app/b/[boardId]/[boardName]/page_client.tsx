@@ -11,6 +11,8 @@ import CardDetailModal, {
 import { tomorrowISO } from "@/components/boards/deadlinePicker";
 import LabelsEditorModal from "@/components/boards/labelsEditorModal";
 import MembersModal from "@/components/boards/membersModal";
+import BoardInfoTip from "@/components/boards/boardInfoTip";
+import BoardInfoModal from "@/components/boards/boardInfoModal";
 import {
   BoardFilterMenu,
   BoardSettingsMenu,
@@ -25,10 +27,12 @@ import {
   createBoardCard,
   deleteBoardCard,
   FEATURE_BOARD_ID,
+  FEATURE_BOARD_INFO,
   getBoardInfo,
   moveBoardCard,
   removeBoardMember,
   updateBoardCard,
+  updateBoardInfo,
   updateBoardLabels,
 } from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
@@ -67,6 +71,7 @@ type BoardInfo = {
   memberProfiles?: MemberProfile[];
   ownerId?: string;
   kind?: string;
+  info?: string;
   lists?: BoardList[];
   labels?: BoardLabel[];
   background?: {
@@ -135,6 +140,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [dragOverList, setDragOverList] = useState<string | null>(null);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -171,6 +177,11 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const memberProfiles = board?.memberProfiles || [];
   const userName = user?.displayName?.replace(/\s+/g, "") || "unknown";
   const title = board?.name || decodeURIComponent(boardName) || "Untitled Board";
+  const isFeatureBoard =
+    boardId === FEATURE_BOARD_ID || board?.kind === "feature-requests";
+  const boardInfoText = isFeatureBoard
+    ? board?.info?.trim() || FEATURE_BOARD_INFO
+    : board?.info || "";
 
   const matchesFilters = (card: TaskCard) => {
     if (assigneeFilter === "me" && user?.uid && !card.assignees?.includes(user.uid)) {
@@ -322,11 +333,16 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           variant="overlay"
           title={title}
           leading={
-            board?.privacy ? (
-              <span className="shrink-0 text-xs uppercase tracking-wide px-2 py-1 rounded-md bg-black/40 text-gray-200">
-                {board.privacy}
-              </span>
-            ) : undefined
+            <>
+              {boardInfoText.trim() ? (
+                <BoardInfoTip info={boardInfoText} />
+              ) : null}
+              {board?.privacy ? (
+                <span className="shrink-0 text-xs uppercase tracking-wide px-2 py-1 rounded-md bg-black/40 text-gray-200">
+                  {board.privacy}
+                </span>
+              ) : null}
+            </>
           }
           actions={
             <HeaderActions
@@ -346,6 +362,9 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                   <BoardSettingsMenu
                     onEditLabels={() => setLabelsOpen(true)}
                     onEditMembers={() => setMembersOpen(true)}
+                    onEditInfo={
+                      isFeatureBoard ? undefined : () => setInfoOpen(true)
+                    }
                   />
                 </>
               }
@@ -468,6 +487,18 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         onComment={handleComment}
         onDelete={handleDeleteCard}
       />
+      <BoardInfoModal
+        open={infoOpen}
+        info={board?.info || ""}
+        onClose={() => setInfoOpen(false)}
+        onSave={async (next) => {
+          const result = await updateBoardInfo(boardId, next);
+          if (!result) return "Failed to update board info";
+          if ("error" in result) return result.error;
+          setBoard((prev) => (prev ? { ...prev, info: result.info } : prev));
+          return null;
+        }}
+      />
       <LabelsEditorModal
         open={labelsOpen}
         labels={boardLabels}
@@ -489,9 +520,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         ownerId={board?.ownerId}
         currentUserId={user?.uid}
         memberProfiles={memberProfiles}
-        lockRemoval={
-          boardId === FEATURE_BOARD_ID || board?.kind === "feature-requests"
-        }
+        lockRemoval={isFeatureBoard}
         onClose={() => setMembersOpen(false)}
         onAdd={async (email) => {
           const result = await addBoardMember(boardId, email, user?.uid);

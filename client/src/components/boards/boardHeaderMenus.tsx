@@ -120,13 +120,24 @@ export function BoardFilterMenu({
 export function BoardSettingsMenu({
   onEditLabels,
   onEditMembers,
+  onEditInfo,
 }: {
   onEditLabels: () => void;
   onEditMembers: () => void;
+  onEditInfo?: () => void;
 }) {
   return (
     <OverlayMenu label="Settings" icon={<Settings className="w-4 h-4" />}>
       <div className="flex flex-col gap-1">
+        {onEditInfo && (
+          <button
+            type="button"
+            onClick={onEditInfo}
+            className="text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover"
+          >
+            Board info
+          </button>
+        )}
         <button
           type="button"
           onClick={onEditLabels}

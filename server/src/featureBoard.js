@@ -6,6 +6,14 @@ import { DEFAULT_LABELS, DEFAULT_LISTS } from "./boardLists.js";
 
 export const FEATURE_BOARD_ID = "feature-requests";
 
+export const FEATURE_BOARD_INFO = [
+  "Search existing cards before posting.",
+  "One request per card.",
+  "Use a clear title and description (problem + why it matters).",
+  "Add a label (Feature / Bug / Idea).",
+  "Comment on duplicates instead of creating a new card.",
+].join("\n");
+
 const client = algoliasearch(
   process.env.ALGOLIA_APP_ID,
   process.env.ALGOLIA_WRITE_API_KEY
@@ -18,6 +26,7 @@ const FEATURE_BOARD_DATA = {
   ownerId: "system",
   privacy: "public",
   kind: "feature-requests",
+  info: FEATURE_BOARD_INFO,
   background: {
     type: "color",
     value: "linear-gradient(to right, #6366f1, #3b82f6)",
@@ -93,12 +102,17 @@ export async function ensureFeatureBoardMember(userId) {
     const data = snap.data();
     members = data.members || [];
     createdAt = data.createdAt || createdAt;
+    const updates = {};
     if (!members.includes(userId)) {
       joined = true;
       members = [...members, userId];
-      tx.update(boardRef, {
-        members: admin.firestore.FieldValue.arrayUnion(userId),
-      });
+      updates.members = admin.firestore.FieldValue.arrayUnion(userId);
+    }
+    if (!String(data.info || "").trim()) {
+      updates.info = FEATURE_BOARD_INFO;
+    }
+    if (Object.keys(updates).length > 0) {
+      tx.update(boardRef, updates);
     }
   });
 
