@@ -117,6 +117,11 @@ router.post("/:id/cards", async (req, res) => {
 
     list.cards.push(card);
     await boardRef.set({ lists }, { merge: true });
+    await addActivity(boardId, card.id, {
+      userId: actor,
+      type: "create",
+      text: "created this card",
+    });
 
     if (assigneeIds.length > 0) {
       notifyUsers({
