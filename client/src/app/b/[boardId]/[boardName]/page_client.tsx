@@ -36,7 +36,7 @@ import {
   updateBoardLabels,
 } from "@/lib/helper";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { Plus } from "lucide-react";
+import { ArrowUpDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { DragEvent, useEffect, useState } from "react";
 
@@ -52,6 +52,7 @@ type TaskCard = {
   assignees?: string[];
   label?: string;
   deadline?: string;
+  createdAt?: string;
   comments?: DetailCard["comments"];
   activity?: DetailCard["activity"];
 };
@@ -125,6 +126,54 @@ function applyMove(
   );
 }
 
+type SortKey =
+  | "deadline-asc"
+  | "deadline-desc"
+  | "title-asc"
+  | "title-desc"
+  | "created-desc"
+  | "created-asc";
+
+const DEFAULT_SORT: SortKey = "deadline-asc";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "deadline-asc", label: "Due date (soonest)" },
+  { value: "deadline-desc", label: "Due date (latest)" },
+  { value: "title-asc", label: "Title (A-Z)" },
+  { value: "title-desc", label: "Title (Z-A)" },
+  { value: "created-desc", label: "Created (newest)" },
+  { value: "created-asc", label: "Created (oldest)" },
+];
+
+function sortCards(cards: TaskCard[], key: SortKey): TaskCard[] {
+  const copy = [...cards];
+  copy.sort((a, b) => {
+    if (key === "deadline-asc" || key === "deadline-desc") {
+      const aD = a.deadline || "";
+      const bD = b.deadline || "";
+      if (!aD && !bD) return (a.title || "").localeCompare(b.title || "");
+      if (!aD) return 1;
+      if (!bD) return -1;
+      const cmp = aD.localeCompare(bD);
+      return key === "deadline-asc" ? cmp : -cmp;
+    }
+    if (key === "title-asc" || key === "title-desc") {
+      const cmp = (a.title || "").localeCompare(b.title || "", undefined, {
+        sensitivity: "base",
+      });
+      return key === "title-asc" ? cmp : -cmp;
+    }
+    const aC = a.createdAt || "";
+    const bC = b.createdAt || "";
+    if (!aC && !bC) return (a.title || "").localeCompare(b.title || "");
+    if (!aC) return 1;
+    if (!bC) return -1;
+    const cmp = aC.localeCompare(bC);
+    return key === "created-asc" ? cmp : -cmp;
+  });
+  return copy;
+}
+
 export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -141,6 +190,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [columnSort, setColumnSort] = useState<Record<string, SortKey>>({});
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -380,7 +430,11 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           ) : (
             <div className="flex gap-4 h-full items-start">
               {lists.map((column) => {
-                const visibleCards = (column.cards || []).filter(matchesFilters);
+                const sortKey = columnSort[column.id] || DEFAULT_SORT;
+                const visibleCards = sortCards(
+                  (column.cards || []).filter(matchesFilters),
+                  sortKey
+                );
                 return (
                   <section
                     key={column.id}
@@ -398,9 +452,32 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                         : "border-border"
                     }`}
                   >
-                    <h2 className="px-4 py-3 font-semibold text-gray-100">
-                      {column.title}
-                    </h2>
+                    <div className="flex items-center justify-between gap-2 px-3 py-3">
+                      <h2 className="font-semibold text-gray-100 truncate min-w-0">
+                        {column.title}
+                      </h2>
+                      <label className="relative shrink-0 flex items-center text-gray-400">
+                        <ArrowUpDown className="w-3.5 h-3.5 pointer-events-none absolute left-1.5" />
+                        <select
+                          value={sortKey}
+                          aria-label={`Sort ${column.title}`}
+                          title="Sort list"
+                          onChange={(event) =>
+                            setColumnSort((prev) => ({
+                              ...prev,
+                              [column.id]: event.target.value as SortKey,
+                            }))
+                          }
+                          className="appearance-none pl-6 pr-1.5 py-1 w-[10.5rem] text-[11px] rounded-md bg-background-alt border border-border text-gray-300"
+                        >
+                          {SORT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                     <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
                       {visibleCards.length === 0 && (
                         <p className="px-1 text-sm text-gray-400">

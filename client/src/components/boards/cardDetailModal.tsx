@@ -48,6 +48,7 @@ export type DetailCard = {
   assignees?: string[];
   label?: string;
   deadline?: string;
+  createdAt?: string;
   comments?: CardComment[];
   activity?: CardActivity[];
 };
@@ -424,6 +425,11 @@ export default function CardDetailModal({
   }
 
   const overdue = isDeadlineOverdue(deadline, listId);
+  const createdAt =
+    currentCard.createdAt ||
+    feedActivity.find((item) => item.type === "create")?.createdAt;
+  const createdDisplay =
+    !isNew && createdAt ? formatTime(createdAt) : "";
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -530,7 +536,7 @@ export default function CardDetailModal({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <p className="mb-1.5 text-xs uppercase tracking-wide text-gray-400">
                   Members
@@ -661,6 +667,15 @@ export default function CardDetailModal({
                   )}
                 </div>
               </div>
+
+              {createdDisplay && (
+                <div>
+                  <p className="mb-1.5 text-xs uppercase tracking-wide text-gray-400">
+                    Created
+                  </p>
+                  <p className="text-sm text-gray-200">{createdDisplay}</p>
+                </div>
+              )}
             </div>
 
             <div>

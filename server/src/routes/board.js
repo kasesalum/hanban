@@ -113,6 +113,8 @@ router.post("/:id/cards", async (req, res) => {
       assignees: assigneeIds,
       label: label || "",
       deadline: deadline ? String(deadline) : "",
+      createdAt: new Date().toISOString(),
+      createdBy: actor,
     };
 
     list.cards.push(card);
