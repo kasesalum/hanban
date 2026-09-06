@@ -534,6 +534,33 @@ export async function uploadCardImage(
   }
 }
 
+export async function uploadAvatar(
+  userId: string,
+  file: File
+): Promise<{ url: string; path: string } | null> {
+  try {
+    if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
+      throw new Error("Invalid image");
+    }
+    const ext =
+      file.type === "image/png"
+        ? "png"
+        : file.type === "image/gif"
+          ? "gif"
+          : file.type === "image/webp"
+            ? "webp"
+            : "jpg";
+    const path = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file, { contentType: file.type });
+    const url = await getDownloadURL(fileRef);
+    return { url, path };
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 export async function deleteBoardCard(
   boardId: string,
   cardId: string

@@ -19,6 +19,7 @@ import {
   NotificationPrefs,
   NotificationType,
   updateNotificationPrefs,
+  uploadAvatar,
 } from "@/lib/helper";
 import { Bell, CircleUser, Pen } from "lucide-react";
 
@@ -35,6 +36,8 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   );
   const [displayName, setDisplayName] = useState("");
   const [photoURL, setPhotoURL] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
 
   // Password modal
@@ -53,6 +56,7 @@ export default function AccountPage({ userName }: DashboardPageProps) {
         setUser(currentUser);
         setDisplayName(currentUser.displayName || "");
         setPhotoURL(currentUser.photoURL || "");
+        setPhotoPreview(currentUser.photoURL || "");
       }
     });
     return () => unsubscribe();
@@ -72,12 +76,43 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   const handleSaveProfile = async () => {
     if (!user) return;
     try {
+      let nextPhoto = photoURL.trim();
+      if (editingField === "photo" && photoFile) {
+        const uploaded = await uploadAvatar(user.uid, photoFile);
+        if (!uploaded) {
+          setStatusMessage("Error uploading photo. Use a JPG, PNG, GIF, or WebP under 5MB.");
+          return;
+        }
+        nextPhoto = uploaded.url;
+      }
+      if (editingField === "photo" && nextPhoto) {
+        try {
+          const parsed = new URL(nextPhoto);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            setStatusMessage("Photo URL must start with http:// or https://");
+            return;
+          }
+        } catch {
+          setStatusMessage("Enter a valid photo URL or choose an image file.");
+          return;
+        }
+      }
+
       await updateProfile(user, {
         displayName,
-        photoURL,
+        ...(editingField === "photo" ? { photoURL: nextPhoto || null } : {}),
       });
+      await user.reload();
+      const nextUser = auth.currentUser;
+      if (nextUser) {
+        setUser(nextUser);
+        setDisplayName(nextUser.displayName || "");
+        setPhotoURL(nextUser.photoURL || nextPhoto);
+        setPhotoPreview(nextUser.photoURL || nextPhoto);
+      }
+      setPhotoFile(null);
       setEditingField(null);
-      setStatusMessage("Profile updated successfully ✅");
+      setStatusMessage("Profile updated successfully");
     } catch (error: any) {
       setStatusMessage("Error updating profile: " + error.message);
     }
@@ -185,24 +220,43 @@ export default function AccountPage({ userName }: DashboardPageProps) {
               )}
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 w-full">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <img
-                  src={photoURL || "/default-avatar.png"}
+                  src={photoPreview || photoURL || "/default-avatar.png"}
                   alt="Avatar"
-                  className="w-12 h-12 rounded-full border border-border object-cover"
+                  className="w-12 h-12 rounded-full border border-border object-cover shrink-0"
                 />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-400">Photo</p>
                   {editingField === "photo" ? (
-                    <input
-                      type="text"
-                      value={photoURL}
-                      onChange={(e) => setPhotoURL(e.target.value)}
-                      className="w-[1000px] p-2 mt-1 rounded-md border border-border 
-                      bg-background text-foreground text-sm focus:ring-2 
-                      focus:ring-primary focus:outline-none"
-                    />
+                    <div className="mt-1 space-y-2">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setPhotoFile(file);
+                          if (file) {
+                            setPhotoPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                        className="block w-full text-sm text-gray-300 file:mr-3 file:rounded-md file:border-0 file:bg-foreground file:px-3 file:py-1 file:text-sm file:text-background"
+                      />
+                      <input
+                        type="url"
+                        value={photoFile ? "" : photoURL}
+                        onChange={(e) => {
+                          setPhotoFile(null);
+                          setPhotoURL(e.target.value);
+                          setPhotoPreview(e.target.value);
+                        }}
+                        placeholder="Or paste an image URL"
+                        className="w-full p-2 rounded-md border border-border 
+                        bg-background text-foreground text-sm focus:ring-2 
+                        focus:ring-primary focus:outline-none"
+                      />
+                    </div>
                   ) : (
                     <p className="font-medium truncate">
                       {photoURL || "Not set"}
@@ -211,7 +265,7 @@ export default function AccountPage({ userName }: DashboardPageProps) {
                 </div>
               </div>
               {editingField === "photo" ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button
                     onClick={handleSaveProfile}
                     className="px-3 py-1 rounded-md bg-foreground text-background text-sm"
@@ -219,7 +273,12 @@ export default function AccountPage({ userName }: DashboardPageProps) {
                     Save
                   </button>
                   <button
-                    onClick={() => setEditingField(null)}
+                    onClick={() => {
+                      setEditingField(null);
+                      setPhotoFile(null);
+                      setPhotoURL(user.photoURL || "");
+                      setPhotoPreview(user.photoURL || "");
+                    }}
                     className="px-3 py-1 rounded-md border text-sm"
                   >
                     Cancel
@@ -228,7 +287,7 @@ export default function AccountPage({ userName }: DashboardPageProps) {
               ) : (
                 <button
                   onClick={() => setEditingField("photo")}
-                  className="p-2 hover:bg-border-hover rounded-lg"
+                  className="p-2 hover:bg-border-hover rounded-lg shrink-0"
                 >
                   <Pen className="w-4 h-4 text-gray-400" />
                 </button>

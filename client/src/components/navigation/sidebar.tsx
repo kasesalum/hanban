@@ -157,7 +157,8 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
             alt="Profile"
             width={collapsed ? 32 : 36}
             height={collapsed ? 32 : 36}
-            className="rounded-full"
+            unoptimized
+            className="rounded-full object-cover"
           />
         </button>
 
