@@ -71,3 +71,44 @@ a {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.rich-text b,
+.rich-text strong {
+  font-weight: 700;
+}
+
+.rich-text i,
+.rich-text em {
+  font-style: italic;
+}
+
+.rich-text u {
+  text-decoration: underline;
+}
+
+.rich-text a {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.rich-text a:hover {
+  color: #93c5fd;
+}
+
+.rich-text img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.rich-text p {
+  margin: 0 0 0.5rem;
+}
+
+.rich-text p:last-child {
+  margin-bottom: 0;
+}

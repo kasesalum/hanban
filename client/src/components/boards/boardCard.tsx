@@ -224,7 +224,9 @@ export default function BoardCard({
           <div className="space-y-1.5 pb-1">
             {!compact && board.description && (
               <p className="text-xs text-gray-400 line-clamp-2">
-                <DescriptionText text={board.description} />
+                {/<\/?[a-z][\s\S]*>/i.test(board.description)
+                  ? board.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                  : <DescriptionText text={board.description} />}
               </p>
             )}
             <div className="flex flex-wrap gap-1">

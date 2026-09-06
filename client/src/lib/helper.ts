@@ -1,6 +1,7 @@
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { commands } from "@/lib/commands";
 
@@ -407,6 +408,7 @@ export type CardUpdateFields = {
   deadline?: string;
   listId?: string;
   actorId?: string;
+  descriptionAttachments?: { url: string; path: string }[];
 };
 
 export async function updateBoardCard(
@@ -431,20 +433,74 @@ export async function updateBoardCard(
 export async function addCardComment(
   boardId: string,
   cardId: string,
-  text: string,
-  actorId?: string
-): Promise<{ card: any; lists: any[] } | null> {
+  html: string,
+  actorId?: string,
+  attachments?: { url: string; path: string }[]
+): Promise<{ comment: any; activity: any; lists?: any[] } | null> {
   try {
     const res = await fetch(
       `${API_BASE}/api/board/${boardId}/cards/${cardId}/comments`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, actorId }),
+        body: JSON.stringify({ html, actorId, attachments }),
       }
     );
     if (!res.ok) throw new Error("Failed to add comment");
     return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export async function getCardFeed(
+  boardId: string,
+  cardId: string
+): Promise<{ comments: any[]; activity: any[] } | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/board/${boardId}/cards/${cardId}/feed`
+    );
+    if (!res.ok) throw new Error("Failed to fetch card feed");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+const IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export async function uploadCardImage(
+  boardId: string,
+  cardId: string,
+  kind: "description" | "comments",
+  file: File
+): Promise<{ url: string; path: string } | null> {
+  try {
+    if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
+      throw new Error("Invalid image");
+    }
+    const ext =
+      file.type === "image/png"
+        ? "png"
+        : file.type === "image/gif"
+          ? "gif"
+          : file.type === "image/webp"
+            ? "webp"
+            : "jpg";
+    const path = `boards/${boardId}/cards/${cardId}/${kind}/${crypto.randomUUID()}.${ext}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file, { contentType: file.type });
+    const url = await getDownloadURL(fileRef);
+    return { url, path };
   } catch (err) {
     console.error(err);
     return null;

@@ -223,6 +223,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const handleUpdateCard = async (fields: {
     title?: string;
     description?: string;
+    descriptionAttachments?: { url: string; path: string }[];
     assignees?: string[];
     label?: string;
     deadline?: string;
@@ -235,15 +236,18 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     if (result) applyCardResult(result);
   };
 
-  const handleComment = async (text: string) => {
+  const handleComment = async (
+    html: string,
+    attachments: { url: string; path: string }[]
+  ) => {
     if (!openCard || openCard.isNew) return;
-    const result = await addCardComment(
+    await addCardComment(
       boardId,
       openCard.card.id,
-      text,
-      user?.uid
+      html,
+      user?.uid,
+      attachments
     );
-    if (result) applyCardResult(result);
   };
 
   const handleDeleteCard = async () => {
@@ -442,6 +446,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
 
       <CardDetailModal
         open={Boolean(openCard)}
+        boardId={boardId}
         card={openCard?.card || null}
         listId={openCard?.listId || ""}
         lists={lists}

@@ -17,6 +17,21 @@ import {
   ensureFeatureBoardMember,
   isFeatureBoard,
 } from "../featureBoard.js";
+import {
+  addActivity,
+  addComment,
+  deleteCardFeed,
+  listFeed,
+  migrateNestedCard,
+  normalizeAttachments,
+  stripCardFeed,
+  stripListsFeed,
+} from "../cardFeed.js";
+import {
+  htmlToPlain,
+  isEmptyHtml,
+  sanitizeHtml,
+} from "../htmlSanitize.js";
 
 const router = express.Router();
 const algolia = algoliasearch(
@@ -43,24 +58,6 @@ function cloneLists(data) {
   }));
 }
 
-function withCardCollections(card) {
-  return {
-    ...card,
-    comments: Array.isArray(card.comments) ? card.comments : [],
-    activity: Array.isArray(card.activity) ? card.activity : [],
-  };
-}
-
-function activityEntry(userId, type, text) {
-  return {
-    id: randomUUID(),
-    userId: userId || "",
-    type,
-    text,
-    createdAt: new Date().toISOString(),
-  };
-}
-
 function findCard(lists, cardId) {
   for (const list of lists) {
     const index = list.cards.findIndex((item) => item.id === cardId);
@@ -79,7 +76,7 @@ router.post("/:id/cards", async (req, res) => {
       req.body || {};
     const actor = String(actorId || "");
 
-    if (!listId || !title || !String(title).trim()) {
+    if (!listId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -111,13 +108,11 @@ router.post("/:id/cards", async (req, res) => {
 
     const card = {
       id: randomUUID(),
-      title: String(title).trim().substring(0, 120),
-      description: description ? String(description).trim() : "",
+      title: String(title || "").trim().substring(0, 120) || "Untitled",
+      description: description ? sanitizeHtml(String(description)) : "",
       assignees: assigneeIds,
       label: label || "",
       deadline: deadline ? String(deadline) : "",
-      comments: [],
-      activity: [],
     };
 
     list.cards.push(card);
@@ -137,7 +132,7 @@ router.post("/:id/cards", async (req, res) => {
       });
     }
 
-    res.json({ card, lists });
+    res.json({ card, lists: stripListsFeed(lists) });
   } catch (error) {
     console.error("Error creating card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -148,8 +143,16 @@ router.post("/:id/cards", async (req, res) => {
 router.patch("/:id/cards/:cardId", async (req, res) => {
   try {
     const { id: boardId, cardId } = req.params;
-    const { listId, title, description, assignees, label, deadline, actorId } =
-      req.body || {};
+    const {
+      listId,
+      title,
+      description,
+      assignees,
+      label,
+      deadline,
+      actorId,
+      descriptionAttachments,
+    } = req.body || {};
     const actor = String(actorId || "");
 
     const hasList = typeof listId === "string" && listId.length > 0;
@@ -185,8 +188,9 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       return res.status(404).json({ error: "Card not found" });
     }
 
-    let card = withCardCollections(found.card);
-    const activity = [...card.activity];
+    let card = { ...found.card };
+    await migrateNestedCard(boardId, card);
+    const pendingActivity = [];
 
     if (hasTitle) {
       const next = String(title).trim().substring(0, 120);
@@ -194,24 +198,31 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
         return res.status(400).json({ error: "Title cannot be empty" });
       }
       if (next !== card.title) {
-        activity.push(
-          activityEntry(actor, "title", `renamed this card to “${next}”`)
-        );
+        pendingActivity.push({
+          userId: actor,
+          type: "title",
+          text: `renamed this card to “${next}”`,
+        });
         card.title = next;
       }
     }
 
     if (hasDescription) {
-      const next = String(description).trim();
+      const next = sanitizeHtml(String(description));
       if (next !== (card.description || "")) {
-        activity.push(
-          activityEntry(
-            actor,
-            "description",
-            next ? "updated the description" : "removed the description"
-          )
-        );
+        pendingActivity.push({
+          userId: actor,
+          type: "description",
+          text: isEmptyHtml(next)
+            ? "removed the description"
+            : "updated the description",
+        });
         card.description = next;
+      }
+      if (Array.isArray(descriptionAttachments)) {
+        card.descriptionAttachments = normalizeAttachments(
+          descriptionAttachments
+        );
       }
     }
 
@@ -240,7 +251,11 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
             `removed ${removed.length} member${removed.length === 1 ? "" : "s"}`
           );
         }
-        activity.push(activityEntry(actor, "assignees", bits.join(" and ")));
+        pendingActivity.push({
+          userId: actor,
+          type: "assignees",
+          text: bits.join(" and "),
+        });
         card.assignees = assigneeIds;
       }
     }
@@ -253,13 +268,11 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       if (next !== (card.label || "")) {
         const labelName =
           labels.find((item) => item.id === next)?.name || "none";
-        activity.push(
-          activityEntry(
-            actor,
-            "label",
-            next ? `set the label to “${labelName}”` : "removed the label"
-          )
-        );
+        pendingActivity.push({
+          userId: actor,
+          type: "label",
+          text: next ? `set the label to “${labelName}”` : "removed the label",
+        });
         card.label = next;
       }
     }
@@ -267,13 +280,13 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     if (hasDeadline) {
       const next = String(deadline);
       if (next !== (card.deadline || "")) {
-        activity.push(
-          activityEntry(
-            actor,
-            "deadline",
-            next ? `changed the due date to ${next}` : "removed the due date"
-          )
-        );
+        pendingActivity.push({
+          userId: actor,
+          type: "deadline",
+          text: next
+            ? `changed the due date to ${next}`
+            : "removed the due date",
+        });
         card.deadline = next;
         delete card.notifiedApproaching;
         delete card.notifiedOverdue;
@@ -294,11 +307,11 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
             : found.list.id === "done"
               ? `moved this card to ${target.title}`
               : `moved this card to ${target.title}`;
-        activity.push(activityEntry(actor, type, text));
+        pendingActivity.push({ userId: actor, type, text });
       }
     }
 
-    card.activity = activity;
+    card = stripCardFeed(card);
     found.list.cards[found.index] = card;
 
     if (hasList && listId !== found.list.id) {
@@ -308,6 +321,9 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     }
 
     await boardRef.set({ lists }, { merge: true });
+    await Promise.all(
+      pendingActivity.map((entry) => addActivity(boardId, cardId, entry))
+    );
 
     const boardMeta = {
       boardId,
@@ -355,9 +371,39 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       });
     }
 
-    res.json({ card, lists });
+    res.json({ card: stripCardFeed(card), lists: stripListsFeed(lists) });
   } catch (error) {
     console.error("Error updating card:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/board/:id/cards/:cardId/feed
+router.get("/:id/cards/:cardId/feed", async (req, res) => {
+  try {
+    const { id: boardId, cardId } = req.params;
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const lists = cloneLists(boardSnap.data());
+    const found = findCard(lists, cardId);
+    if (!found) {
+      return res.status(404).json({ error: "Card not found" });
+    }
+
+    const stripped = await migrateNestedCard(boardId, found.card);
+    if (stripped) {
+      found.list.cards[found.index] = stripCardFeed(found.card);
+      await boardRef.set({ lists }, { merge: true });
+    }
+
+    const feed = await listFeed(boardId, cardId);
+    res.json(feed);
+  } catch (error) {
+    console.error("Error fetching card feed:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -366,9 +412,11 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
 router.post("/:id/cards/:cardId/comments", async (req, res) => {
   try {
     const { id: boardId, cardId } = req.params;
-    const text = String(req.body?.text || "").trim().substring(0, 2000);
     const actorId = String(req.body?.actorId || "");
-    if (!text) {
+    const html = sanitizeHtml(
+      req.body?.html || req.body?.text || ""
+    );
+    if (isEmptyHtml(html)) {
       return res.status(400).json({ error: "Missing text" });
     }
 
@@ -384,38 +432,39 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
       return res.status(404).json({ error: "Card not found" });
     }
 
-    const card = withCardCollections(found.card);
-    const createdAt = new Date().toISOString();
-    const comment = {
-      id: randomUUID(),
-      userId: actorId,
-      text,
-      createdAt,
-    };
-    card.comments = [...card.comments, comment];
-    card.activity = [
-      ...card.activity,
-      activityEntry(actorId, "comment", text),
-    ];
-    found.list.cards[found.index] = card;
+    const needsStrip =
+      Array.isArray(found.card.comments) || Array.isArray(found.card.activity);
+    await migrateNestedCard(boardId, found.card);
+    if (needsStrip) {
+      found.list.cards[found.index] = stripCardFeed(found.card);
+      await boardRef.set({ lists }, { merge: true });
+    }
 
-    await boardRef.set({ lists }, { merge: true });
+    const result = await addComment(boardId, cardId, {
+      userId: actorId,
+      html,
+      attachments: req.body?.attachments,
+    });
 
     const boardData = boardSnap.data();
     notifyUsers({
       type: NOTIFICATION_TYPES.commentAdded,
-      userIds: card.assignees || [],
+      userIds: found.card.assignees || [],
       actorId,
       boardId,
       boardName: boardData.name || "Untitled board",
       urlName: boardData.urlName,
-      card,
-      extra: { commentPreview: text },
+      card: found.card,
+      extra: { commentPreview: htmlToPlain(html) },
     }).catch((err) => {
       console.error("Error sending comment notification:", err);
     });
 
-    res.json({ card, lists });
+    res.json({
+      comment: result.comment,
+      activity: result.activity,
+      lists: stripListsFeed(lists),
+    });
   } catch (error) {
     console.error("Error adding comment:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -440,7 +489,8 @@ router.delete("/:id/cards/:cardId", async (req, res) => {
 
     found.list.cards.splice(found.index, 1);
     await boardRef.set({ lists }, { merge: true });
-    res.json({ lists });
+    await deleteCardFeed(boardId, cardId);
+    res.json({ lists: stripListsFeed(lists) });
   } catch (error) {
     console.error("Error deleting card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -487,7 +537,7 @@ router.put("/:id/labels", async (req, res) => {
     }));
 
     await boardRef.set({ labels, lists }, { merge: true });
-    res.json({ labels, lists });
+    res.json({ labels, lists: stripListsFeed(lists) });
   } catch (error) {
     if (error.message === "invalid-label") {
       return res.status(400).json({ error: "Invalid label name or color" });
@@ -651,7 +701,13 @@ router.get("/:id", async (req, res) => {
 
     const memberProfiles = await memberProfilesForUids(data.members || []);
 
-    res.json({ id: boardSnap.id, ...data, lists, labels, memberProfiles });
+    res.json({
+      id: boardSnap.id,
+      ...data,
+      lists: stripListsFeed(lists),
+      labels,
+      memberProfiles,
+    });
   } catch (error) {
     console.error("Error fetching board:", error);
     res.status(500).json({ error: "Internal server error" });

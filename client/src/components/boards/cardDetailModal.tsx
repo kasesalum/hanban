@@ -14,11 +14,20 @@ import DeadlinePicker, {
   isDeadlineOverdue,
   tomorrowISO,
 } from "@/components/boards/deadlinePicker";
+import RichTextEditor, {
+  RichTextHtml,
+  isEmptyHtml,
+  looksLikeHtml,
+  type RichAttachment,
+} from "@/components/boards/richTextEditor";
+import { getCardFeed, uploadCardImage } from "@/lib/helper";
 
 export type CardComment = {
   id: string;
   userId: string;
-  text: string;
+  html?: string;
+  text?: string;
+  attachments?: RichAttachment[];
   createdAt: string;
 };
 
@@ -27,6 +36,7 @@ export type CardActivity = {
   userId: string;
   type: string;
   text: string;
+  commentId?: string;
   createdAt: string;
 };
 
@@ -34,6 +44,7 @@ export type DetailCard = {
   id: string;
   title: string;
   description?: string;
+  descriptionAttachments?: RichAttachment[];
   assignees?: string[];
   label?: string;
   deadline?: string;
@@ -44,6 +55,7 @@ export type DetailCard = {
 type CardFields = {
   title?: string;
   description?: string;
+  descriptionAttachments?: RichAttachment[];
   assignees?: string[];
   label?: string;
   deadline?: string;
@@ -51,6 +63,7 @@ type CardFields = {
 
 interface CardDetailModalProps {
   open: boolean;
+  boardId?: string;
   card: DetailCard | null;
   listId: string;
   lists: { id: string; title: string }[];
@@ -69,7 +82,7 @@ interface CardDetailModalProps {
     label?: string;
     deadline?: string;
   }) => Promise<boolean>;
-  onComment: (text: string) => Promise<void>;
+  onComment: (html: string, attachments: RichAttachment[]) => Promise<void>;
   onDelete: () => Promise<void>;
 }
 
@@ -157,6 +170,7 @@ function Avatar({
 
 export default function CardDetailModal({
   open,
+  boardId,
   card,
   listId,
   lists,
@@ -174,21 +188,31 @@ export default function CardDetailModal({
 }: CardDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionAttachments, setDescriptionAttachments] = useState<
+    RichAttachment[]
+  >([]);
   const [assignees, setAssignees] = useState<string[]>([]);
   const [label, setLabel] = useState("");
   const [deadline, setDeadline] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [comment, setComment] = useState("");
+  const [commentAttachments, setCommentAttachments] = useState<RichAttachment[]>(
+    []
+  );
+  const [commentKey, setCommentKey] = useState(0);
   const [hideDetails, setHideDetails] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [feedComments, setFeedComments] = useState<CardComment[]>([]);
+  const [feedActivity, setFeedActivity] = useState<CardActivity[]>([]);
   const membersRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const creatingRef = useRef(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     setMounted(true);
@@ -198,11 +222,14 @@ export default function CardDetailModal({
     if (!card) return;
     setTitle(card.title);
     setDescription(card.description || "");
+    setDescriptionAttachments(card.descriptionAttachments || []);
     setAssignees(card.assignees || []);
     setLabel(card.label || "");
     setDeadline(card.deadline || (isNew ? tomorrowISO() : ""));
     setEditingDescription(false);
     setComment("");
+    setCommentAttachments([]);
+    setCommentKey((key) => key + 1);
     setConfirmDelete(false);
     creatingRef.current = false;
   }, [
@@ -223,12 +250,29 @@ export default function CardDetailModal({
   }, [open, isNew, card?.id]);
 
   useEffect(() => {
+    if (!open || !card?.id || isNew || !boardId) {
+      setFeedComments([]);
+      setFeedActivity([]);
+      return;
+    }
+    let cancelled = false;
+    getCardFeed(boardId, card.id).then((data) => {
+      if (cancelled || !data) return;
+      setFeedComments(data.comments || []);
+      setFeedActivity(data.activity || []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, boardId, card?.id, isNew]);
+
+  useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -247,66 +291,135 @@ export default function CardDetailModal({
   }, []);
 
   const feed = useMemo(() => {
-    const activity = [...(card?.activity || [])].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    const activity = [...feedActivity].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    if (hideDetails) return activity.filter((item) => item.type === "comment");
-    return activity;
-  }, [card?.activity, hideDetails]);
+    const visible = hideDetails
+      ? activity.filter((item) => item.type === "comment")
+      : activity;
+    return visible.map((item) => {
+      if (item.type !== "comment") return { ...item, html: undefined as string | undefined };
+      const comment =
+        (item.commentId &&
+          feedComments.find((entry) => entry.id === item.commentId)) ||
+        feedComments.find((entry) => entry.createdAt === item.createdAt);
+      return {
+        ...item,
+        html: comment?.html || comment?.text || item.text,
+      };
+    });
+  }, [feedActivity, feedComments, hideDetails]);
 
   if (!open || !card || !mounted) return null;
   const currentCard = card;
 
-  async function save(fields: CardFields) {
+  function hasDraftContent(fields?: CardFields) {
+    const nextTitle = (fields?.title ?? title).trim();
+    const nextDescription = fields?.description ?? description;
+    const nextAssignees = fields?.assignees ?? assignees;
+    const nextLabel = fields?.label ?? label;
+    const nextDeadline = fields?.deadline ?? deadline;
+    const initialDeadline = currentCard.deadline || tomorrowISO();
+    return (
+      Boolean(nextTitle) ||
+      !isEmptyHtml(nextDescription) ||
+      nextAssignees.length > 0 ||
+      Boolean(nextLabel) ||
+      Boolean(nextDeadline && nextDeadline !== initialDeadline)
+    );
+  }
+
+  async function save(fields: CardFields): Promise<boolean> {
     if (fields.assignees) setAssignees(fields.assignees);
     if (fields.label !== undefined) setLabel(fields.label);
     if (fields.deadline !== undefined) setDeadline(fields.deadline);
 
     if (isNew) {
-      const nextTitle = (fields.title ?? title).trim();
-      if (!nextTitle || !onCreate || creatingRef.current) return;
+      if (!hasDraftContent(fields) || !onCreate || creatingRef.current) {
+        return false;
+      }
+      const nextTitle = (fields.title ?? title).trim() || "Untitled";
       creatingRef.current = true;
       setBusy(true);
       const created = await onCreate({
         title: nextTitle,
-        description: (fields.description ?? description).trim(),
+        description: fields.description ?? description,
         assignees: fields.assignees ?? assignees,
         label: fields.label ?? label,
         deadline: fields.deadline ?? deadline,
       });
       if (!created) creatingRef.current = false;
       setBusy(false);
-      return;
+      return created;
     }
 
     setBusy(true);
     await onUpdate(fields);
+    if (boardId && currentCard.id) {
+      const data = await getCardFeed(boardId, currentCard.id);
+      if (data) {
+        setFeedComments(data.comments || []);
+        setFeedActivity(data.activity || []);
+      }
+    }
     setBusy(false);
+    return true;
   }
+
+  async function handleClose() {
+    if (isNew && hasDraftContent()) {
+      const created = await save({});
+      if (!created && hasDraftContent()) return;
+    }
+    onClose();
+  }
+  closeRef.current = () => {
+    void handleClose();
+  };
 
   async function handleTitleBlur() {
     const next = title.trim();
-    if (!next) {
-      if (!isNew) setTitle(currentCard.title);
+    if (!isNew) {
+      if (!next) {
+        setTitle(currentCard.title);
+        return;
+      }
+      if (next === currentCard.title) return;
+      await save({ title: next });
       return;
     }
-    if (!isNew && next === currentCard.title) return;
-    await save({ title: next });
+    if (hasDraftContent({ title: next })) {
+      await save({ title: next });
+    }
   }
 
-  async function handleDescriptionBlur() {
+  async function handleDescriptionCommit(
+    html: string,
+    attachments: RichAttachment[]
+  ) {
     setEditingDescription(false);
-    if ((description.trim() || "") === (currentCard.description || "")) return;
-    await save({ description: description.trim() });
+    setDescription(html);
+    setDescriptionAttachments(attachments);
+    if (html === (currentCard.description || "")) return;
+    await save({ description: html, descriptionAttachments: attachments });
   }
 
   async function handleComment(event: FormEvent) {
     event.preventDefault();
-    const text = comment.trim();
-    if (!text || busy || isNew) return;
+    if (isEmptyHtml(comment) || busy || isNew) return;
     setBusy(true);
-    await onComment(text);
+    await onComment(comment, commentAttachments);
+    if (boardId && currentCard.id) {
+      const data = await getCardFeed(boardId, currentCard.id);
+      if (data) {
+        setFeedComments(data.comments || []);
+        setFeedActivity(data.activity || []);
+      }
+    }
     setComment("");
+    setCommentAttachments([]);
+    setCommentKey((key) => key + 1);
     setBusy(false);
   }
 
@@ -316,7 +429,9 @@ export default function CardDetailModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50 transition-opacity"
-        onClick={onClose}
+        onClick={() => {
+          void handleClose();
+        }}
       />
       <div className="relative w-full max-w-4xl h-[min(46rem,94vh)] max-h-[94vh] overflow-hidden rounded-xl bg-background shadow-xl border border-border flex flex-col">
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
@@ -372,7 +487,9 @@ export default function CardDetailModal({
               ))}
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                void handleClose();
+              }}
               className="text-gray-400 hover:text-white"
               aria-label="Close"
             >
@@ -549,34 +666,51 @@ export default function CardDetailModal({
             <div>
               <p className="mb-1.5 text-sm text-gray-400">Description</p>
               {editingDescription ? (
-                <textarea
+                <RichTextEditor
                   autoFocus
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  onBlur={handleDescriptionBlur}
                   placeholder="Add a more detailed description..."
-                  rows={5}
-                  className="w-full px-3 py-2 rounded-md bg-background-alt border border-border text-sm text-gray-100 resize-y"
+                  onChange={(html, attachments) => {
+                    setDescription(html);
+                    setDescriptionAttachments(attachments);
+                  }}
+                  onBlur={handleDescriptionCommit}
+                  uploadImage={
+                    boardId && !isNew
+                      ? (file) =>
+                          uploadCardImage(
+                            boardId,
+                            currentCard.id,
+                            "description",
+                            file
+                          )
+                      : undefined
+                  }
                 />
               ) : (
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => setEditingDescription(true)}
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest("a")) return;
+                    setEditingDescription(true);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       setEditingDescription(true);
                     }
                   }}
-                  className="w-full text-left min-h-24 px-3 py-2 rounded-md bg-background-alt border border-border text-sm text-gray-200 whitespace-pre-wrap cursor-text"
+                  className="w-full text-left min-h-24 px-3 py-2 rounded-md bg-background-alt border border-border text-sm text-gray-200 cursor-text"
                 >
-                  {description.trim() ? (
-                    <DescriptionText text={description} />
-                  ) : (
+                  {isEmptyHtml(description) ? (
                     <span className="text-gray-500">
                       Add a more detailed description...
                     </span>
+                  ) : looksLikeHtml(description) ? (
+                    <RichTextHtml html={description} />
+                  ) : (
+                    <DescriptionText text={description} />
                   )}
                 </div>
               )}
@@ -599,19 +733,33 @@ export default function CardDetailModal({
             </div>
 
             <form onSubmit={handleComment}>
-              <textarea
+              <RichTextEditor
+                key={commentKey}
                 value={comment}
-                onChange={(e) => setComment(e.target.value)}
+                disabled={isNew}
+                minHeightClass="min-h-20"
                 placeholder={
                   isNew ? "Add a title to comment..." : "Write a comment..."
                 }
-                disabled={isNew}
-                rows={3}
-                className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm text-gray-100 resize-none disabled:opacity-60"
+                onChange={(html, attachments) => {
+                  setComment(html);
+                  setCommentAttachments(attachments);
+                }}
+                uploadImage={
+                  boardId && !isNew
+                    ? (file) =>
+                        uploadCardImage(
+                          boardId,
+                          currentCard.id,
+                          "comments",
+                          file
+                        )
+                    : undefined
+                }
               />
               <button
                 type="submit"
-                disabled={isNew || busy || !comment.trim()}
+                disabled={isNew || busy || isEmptyHtml(comment)}
                 className="mt-2 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/80 text-sm disabled:opacity-50"
               >
                 Save
@@ -645,9 +793,13 @@ export default function CardDetailModal({
                         )}
                       </p>
                       {item.type === "comment" && (
-                        <p className="mt-1 text-gray-200 whitespace-pre-wrap">
-                          {item.text}
-                        </p>
+                        <div className="mt-1 text-gray-200">
+                          {looksLikeHtml(item.html || "") ? (
+                            <RichTextHtml html={item.html || ""} />
+                          ) : (
+                            <p className="whitespace-pre-wrap">{item.html}</p>
+                          )}
+                        </div>
                       )}
                       <p className="mt-0.5 text-xs text-blue-400">
                         {formatTime(item.createdAt)}
