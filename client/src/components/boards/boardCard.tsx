@@ -233,10 +233,16 @@ export default function BoardCard({
               <LabelChip labelId={board.label} labels={labels} />
               {board.deadline && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                  className={`rounded border ${
+                    compact
+                      ? "text-xs font-semibold px-2 py-1"
+                      : "text-[10px] px-1.5 py-0.5"
+                  } ${
                     isDeadlineOverdue(board.deadline, listId)
-                      ? "border-red-500 text-red-400 bg-red-500/15"
-                      : "border-border text-gray-300"
+                      ? "border-red-500 text-red-300 bg-red-500/25"
+                      : compact
+                        ? "border-amber-400/60 text-amber-200 bg-amber-500/20"
+                        : "border-border text-gray-300"
                   }`}
                 >
                   {isDeadlineOverdue(board.deadline, listId)
