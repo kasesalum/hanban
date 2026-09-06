@@ -78,12 +78,16 @@ export default function AccountPage({ userName }: DashboardPageProps) {
     try {
       let nextPhoto = photoURL.trim();
       if (editingField === "photo" && photoFile) {
-        const uploaded = await uploadAvatar(user.uid, photoFile);
-        if (!uploaded) {
-          setStatusMessage("Error uploading photo. Use a JPG, PNG, GIF, or WebP under 5MB.");
+        try {
+          const uploaded = await uploadAvatar(user.uid, photoFile);
+          nextPhoto = uploaded.url;
+        } catch (error: any) {
+          setStatusMessage(
+            error?.message ||
+              "Error uploading photo. Use a JPG, PNG, GIF, or WebP under 5MB."
+          );
           return;
         }
-        nextPhoto = uploaded.url;
       }
       if (editingField === "photo" && nextPhoto) {
         try {

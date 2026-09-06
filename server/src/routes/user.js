@@ -5,7 +5,13 @@ import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
 import { DEFAULT_LABELS, DEFAULT_LISTS } from "../boardLists.js";
 import { ensureFeatureBoardMember } from "../featureBoard.js";
-import { searchUsers } from "../users.js";
+import { invalidateUserCache, searchUsers } from "../users.js";
+import {
+  decodeImagePayload,
+  extForContentType,
+  uploadImageBuffer,
+} from "../storageUpload.js";
+import { randomUUID } from "crypto";
 
 const router = express.Router();
 
@@ -161,6 +167,33 @@ router.post("/createBoard", async (req, res) => {
   } catch (err) {
     console.error("Error creating board:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/user/avatar
+router.post("/avatar", async (req, res) => {
+  try {
+    const userId = String(req.body?.userId || "");
+    const contentType = String(req.body?.contentType || "");
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    const buffer = decodeImagePayload(contentType, req.body?.data);
+    const path = `avatars/${userId}/${randomUUID()}.${extForContentType(contentType)}`;
+    const uploaded = await uploadImageBuffer(path, contentType, buffer);
+
+    await admin.auth().updateUser(userId, { photoURL: uploaded.url });
+    invalidateUserCache();
+
+    res.json(uploaded);
+  } catch (err) {
+    console.error("Error uploading avatar:", err);
+    res.status(err.status || 500).json({
+      error: err.status
+        ? err.message
+        : "Internal server error",
+    });
   }
 });
 

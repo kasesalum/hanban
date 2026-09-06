@@ -12,7 +12,14 @@ import { isMailConfigured } from "./mailer.js";
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+const imageUploadPath =
+  /^\/api\/user\/avatar$|^\/api\/board\/[^/]+\/cards\/[^/]+\/images$/;
+app.use((req, res, next) => {
+  if (req.method === "POST" && imageUploadPath.test(req.path)) {
+    return express.json({ limit: "8mb" })(req, res, next);
+  }
+  return express.json()(req, res, next);
+});
 
 console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
 console.log(

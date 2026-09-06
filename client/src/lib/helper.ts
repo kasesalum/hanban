@@ -1,7 +1,6 @@
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { commands } from "@/lib/commands";
 
@@ -505,6 +504,19 @@ const IMAGE_TYPES = new Set([
 ]);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function uploadCardImage(
   boardId: string,
   cardId: string,
@@ -515,19 +527,21 @@ export async function uploadCardImage(
     if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
       throw new Error("Invalid image");
     }
-    const ext =
-      file.type === "image/png"
-        ? "png"
-        : file.type === "image/gif"
-          ? "gif"
-          : file.type === "image/webp"
-            ? "webp"
-            : "jpg";
-    const path = `boards/${boardId}/cards/${cardId}/${kind}/${crypto.randomUUID()}.${ext}`;
-    const fileRef = storageRef(storage, path);
-    await uploadBytes(fileRef, file, { contentType: file.type });
-    const url = await getDownloadURL(fileRef);
-    return { url, path };
+    const data = await fileToBase64(file);
+    const res = await fetch(
+      `${API_BASE}/api/board/${boardId}/cards/${cardId}/images`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind,
+          contentType: file.type,
+          data,
+        }),
+      }
+    );
+    if (!res.ok) throw new Error("Failed to upload image");
+    return await res.json();
   } catch (err) {
     console.error(err);
     return null;
@@ -542,22 +556,24 @@ export async function uploadAvatar(
     if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
       throw new Error("Invalid image");
     }
-    const ext =
-      file.type === "image/png"
-        ? "png"
-        : file.type === "image/gif"
-          ? "gif"
-          : file.type === "image/webp"
-            ? "webp"
-            : "jpg";
-    const path = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
-    const fileRef = storageRef(storage, path);
-    await uploadBytes(fileRef, file, { contentType: file.type });
-    const url = await getDownloadURL(fileRef);
-    return { url, path };
+    const data = await fileToBase64(file);
+    const res = await fetch(`${API_BASE}/api/user/avatar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        contentType: file.type,
+        data,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || "Failed to upload avatar");
+    }
+    return body;
   } catch (err) {
     console.error(err);
-    return null;
+    throw err;
   }
 }
 

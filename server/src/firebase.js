@@ -10,7 +10,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   storageBucket:
     process.env.FIREBASE_STORAGE_BUCKET ||
-    `${serviceAccount.project_id}.appspot.com`,
+    `${serviceAccount.project_id}.firebasestorage.app`,
 });
 
 export const db = admin.firestore();

@@ -28,6 +28,11 @@ import {
   stripListsFeed,
 } from "../cardFeed.js";
 import {
+  decodeImagePayload,
+  extForContentType,
+  uploadImageBuffer,
+} from "../storageUpload.js";
+import {
   htmlToPlain,
   isEmptyHtml,
   sanitizeHtml,
@@ -412,6 +417,43 @@ router.get("/:id/cards/:cardId/feed", async (req, res) => {
   } catch (error) {
     console.error("Error fetching card feed:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/board/:id/cards/:cardId/images
+router.post("/:id/cards/:cardId/images", async (req, res) => {
+  try {
+    const { id: boardId, cardId } = req.params;
+    const kind = req.body?.kind === "comments" ? "comments" : "description";
+    const contentType = String(req.body?.contentType || "");
+    const actorId = String(req.body?.actorId || "");
+
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const members = boardSnap.data().members || [];
+    if (actorId && !members.includes(actorId)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const lists = cloneLists(boardSnap.data());
+    const found = findCard(lists, cardId);
+    if (!found) {
+      return res.status(404).json({ error: "Card not found" });
+    }
+
+    const buffer = decodeImagePayload(contentType, req.body?.data);
+    const path = `boards/${boardId}/cards/${cardId}/${kind}/${randomUUID()}.${extForContentType(contentType)}`;
+    const uploaded = await uploadImageBuffer(path, contentType, buffer);
+    res.json(uploaded);
+  } catch (error) {
+    console.error("Error uploading card image:", error);
+    res.status(error.status || 500).json({
+      error: error.status ? error.message : "Internal server error",
+    });
   }
 });
 

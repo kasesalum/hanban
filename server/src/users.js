@@ -37,6 +37,11 @@ async function listAuthUsers() {
   return users;
 }
 
+export function invalidateUserCache() {
+  cacheValid = false;
+  cachedUsers = [];
+}
+
 export async function searchUsers(query) {
   const q = String(query || "").trim().toLowerCase();
   if (!q) return [];
