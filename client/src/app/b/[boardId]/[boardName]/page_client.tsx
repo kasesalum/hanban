@@ -262,7 +262,10 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     deadline?: string;
   }) => {
     if (!openCard?.isNew) return false;
-    const result = await createBoardCard(boardId, openCard.listId, fields);
+    const result = await createBoardCard(boardId, openCard.listId, {
+      ...fields,
+      actorId: user?.uid,
+    });
     if (!result) return false;
 
     setBoard((prev) =>

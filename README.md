@@ -61,10 +61,12 @@ cd ../server
 npm install
 cp .env.example .env
 ```
-- Update .env with required environment variables.
+- Update `.env` with required environment variables. Copy from `.env.example`.
+- To send email notifications, set SMTP vars (`SMTP_HOST`, `SMTP_FROM`, and usually `SMTP_USER` / `SMTP_PASS`). Port defaults to `587` (`465` uses TLS). Any SMTP provider works (for Gmail, use an [app password](https://support.google.com/accounts/answer/185833)). If SMTP is unset, in-app inbox notifications still work and emails are skipped.
+- Set `FRONTEND_URL` to the client origin so email links and CORS match.
 - Start the backend:
 ```bash
-npm start
+npm run dev
 ```
 
 --- 

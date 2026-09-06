@@ -1,5 +1,6 @@
 import { db } from "./firebase.js";
-import { isMailConfigured, notifyDeadline } from "./mailer.js";
+import { notifyUsers } from "./mailer.js";
+import { NOTIFICATION_TYPES } from "./notifications.js";
 
 const INTERVAL_MS = 15 * 60 * 1000;
 
@@ -52,18 +53,20 @@ export async function scanDeadlineNotifications() {
           kind === "approaching" ? "notifiedApproaching" : "notifiedOverdue";
         if (card[flag]) continue;
 
-        const sent = await notifyDeadline({
-          kind,
+        await notifyUsers({
+          type:
+            kind === "approaching"
+              ? NOTIFICATION_TYPES.deadlineApproaching
+              : NOTIFICATION_TYPES.deadlineOverdue,
+          userIds: card.assignees || [],
           boardId: doc.id,
           boardName: data.name || "Untitled board",
           urlName: data.urlName,
           card,
         });
 
-        if (sent || !isMailConfigured()) {
-          card[flag] = true;
-          changed = true;
-        }
+        card[flag] = true;
+        changed = true;
       }
     }
 

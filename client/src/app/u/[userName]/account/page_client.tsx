@@ -13,7 +13,14 @@ import {
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/navigation/appShell";
 import PageHeader from "@/components/navigation/pageHeader";
-import { CircleUser, Pen } from "lucide-react";
+import {
+  EMAIL_PREF_OPTIONS,
+  getNotificationPrefs,
+  NotificationPrefs,
+  NotificationType,
+  updateNotificationPrefs,
+} from "@/lib/helper";
+import { Bell, CircleUser, Pen } from "lucide-react";
 
 interface DashboardPageProps {
   userName: string;
@@ -34,6 +41,9 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
+  const [prefsSaving, setPrefsSaving] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -47,6 +57,17 @@ export default function AccountPage({ userName }: DashboardPageProps) {
     });
     return () => unsubscribe();
   }, [router]);
+
+  useEffect(() => {
+    async function loadPrefs() {
+      if (!user) return;
+      setPrefsLoading(true);
+      const data = await getNotificationPrefs(user.uid);
+      setPrefs(data);
+      setPrefsLoading(false);
+    }
+    loadPrefs();
+  }, [user]);
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -82,6 +103,33 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   const handleSignOut = async () => {
     await signOut(auth);
     router.push("/login");
+  };
+
+  const savePrefs = async (next: NotificationPrefs) => {
+    if (!user) return;
+    setPrefs(next);
+    setPrefsSaving(true);
+    const saved = await updateNotificationPrefs(user.uid, next);
+    setPrefsSaving(false);
+    if (saved) {
+      setPrefs(saved);
+      setStatusMessage("Notification preferences saved");
+    } else {
+      setStatusMessage("Error saving notification preferences");
+    }
+  };
+
+  const handleEmailEnabled = (emailEnabled: boolean) => {
+    if (!prefs) return;
+    savePrefs({ ...prefs, emailEnabled });
+  };
+
+  const handleEmailType = (key: NotificationType, enabled: boolean) => {
+    if (!prefs) return;
+    savePrefs({
+      ...prefs,
+      email: { ...prefs.email, [key]: enabled },
+    });
   };
 
   if (!user) return null;
@@ -198,6 +246,58 @@ export default function AccountPage({ userName }: DashboardPageProps) {
                 {new Date(user.metadata.creationTime).toLocaleDateString()}
               </p>
             </div>
+          </section>
+
+          <section className="bg-background-alt rounded-xl shadow-md p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-gray-400" />
+              <h2 className="text-xl font-semibold">Notifications</h2>
+            </div>
+            <p className="text-sm text-gray-400">
+              In-app notifications are always on. These settings only control email.
+            </p>
+            {prefsLoading ? (
+              <p className="text-sm text-gray-400">Loading preferences...</p>
+            ) : !prefs ? (
+              <p className="text-sm text-gray-400">
+                Could not load notification preferences.
+              </p>
+            ) : (
+              <>
+                <label className="flex items-center justify-between gap-4">
+                  <span className="font-medium">Email notifications</span>
+                  <input
+                    type="checkbox"
+                    checked={prefs.emailEnabled}
+                    disabled={prefsSaving}
+                    onChange={(e) => handleEmailEnabled(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </label>
+                <ul
+                  className={`space-y-3 pt-2 ${
+                    prefs.emailEnabled ? "" : "opacity-50"
+                  }`}
+                >
+                  {EMAIL_PREF_OPTIONS.map((option) => (
+                    <li key={option.key}>
+                      <label className="flex items-center justify-between gap-4">
+                        <span className="text-sm">{option.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={prefs.email[option.key] !== false}
+                          disabled={prefsSaving || !prefs.emailEnabled}
+                          onChange={(e) =>
+                            handleEmailType(option.key, e.target.checked)
+                          }
+                          className="h-4 w-4"
+                        />
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </section>
 
           <section className="bg-background-alt rounded-xl shadow-md p-6">

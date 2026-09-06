@@ -10,7 +10,10 @@ import PageHeader from "@/components/navigation/pageHeader";
 import {
   AlertTriangle,
   Bell,
+  Calendar,
+  CheckCircle2,
   Clock,
+  MessageSquare,
   UserPlus,
 } from "lucide-react";
 import {
@@ -46,10 +49,38 @@ function notificationCopy(item: AppNotification) {
       detail: `On ${item.boardName}`,
     };
   }
+  if (item.type === "deadline_overdue") {
+    return {
+      icon: AlertTriangle,
+      title: `Deadline overdue: “${item.cardTitle}”`,
+      detail: `On ${item.boardName}`,
+    };
+  }
+  if (item.type === "comment_added") {
+    return {
+      icon: MessageSquare,
+      title: `New comment on “${item.cardTitle}”`,
+      detail: item.commentPreview || `On ${item.boardName}`,
+    };
+  }
+  if (item.type === "deadline_changed") {
+    return {
+      icon: Calendar,
+      title: `Due date updated on “${item.cardTitle}”`,
+      detail: `On ${item.boardName}`,
+    };
+  }
+  if (item.type === "card_completed") {
+    return {
+      icon: CheckCircle2,
+      title: `“${item.cardTitle}” was marked complete`,
+      detail: `On ${item.boardName}`,
+    };
+  }
   return {
-    icon: AlertTriangle,
-    title: `Deadline overdue: “${item.cardTitle}”`,
-    detail: `On ${item.boardName}`,
+    icon: Bell,
+    title: item.cardTitle || item.boardName,
+    detail: item.boardName,
   };
 }
 

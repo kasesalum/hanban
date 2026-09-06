@@ -9,7 +9,8 @@ import {
   withDefaultLabels,
   withDefaultLists,
 } from "../boardLists.js";
-import { notifyAssigneesAdded, notifyBoardMemberAdded } from "../mailer.js";
+import { notifyUsers } from "../mailer.js";
+import { NOTIFICATION_TYPES } from "../notifications.js";
 import { memberProfilesForUids } from "../users.js";
 import {
   FEATURE_BOARD_ID,
@@ -74,7 +75,9 @@ function findCard(lists, cardId) {
 router.post("/:id/cards", async (req, res) => {
   try {
     const boardId = req.params.id;
-    const { listId, title, description, assignees, label, deadline } = req.body;
+    const { listId, title, description, assignees, label, deadline, actorId } =
+      req.body || {};
+    const actor = String(actorId || "");
 
     if (!listId || !title || !String(title).trim()) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -121,7 +124,10 @@ router.post("/:id/cards", async (req, res) => {
     await boardRef.set({ lists }, { merge: true });
 
     if (assigneeIds.length > 0) {
-      notifyAssigneesAdded({
+      notifyUsers({
+        type: NOTIFICATION_TYPES.assigneeAdded,
+        userIds: assigneeIds,
+        actorId: actor,
         boardId,
         boardName: boardData.name || "Untitled board",
         urlName: boardData.urlName,
@@ -209,7 +215,9 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       }
     }
 
+    const previousListId = found.list.id;
     let addedAssignees = [];
+    let deadlineChanged = false;
     if (hasAssignees) {
       const assigneeIds = assignees.map((uid) => String(uid));
       if (assigneeIds.some((uid) => !members.includes(uid))) {
@@ -269,6 +277,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
         card.deadline = next;
         delete card.notifiedApproaching;
         delete card.notifiedOverdue;
+        deadlineChanged = true;
       }
     }
 
@@ -300,14 +309,49 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
 
     await boardRef.set({ lists }, { merge: true });
 
+    const boardMeta = {
+      boardId,
+      boardName: boardData.name || "Untitled board",
+      urlName: boardData.urlName,
+      actorId: actor,
+      card,
+    };
+    const jobs = [];
+
     if (addedAssignees.length > 0) {
-      notifyAssigneesAdded({
-        boardId,
-        boardName: boardData.name || "Untitled board",
-        urlName: boardData.urlName,
-        card: { ...card, assignees: addedAssignees },
-      }).catch((err) => {
-        console.error("Error sending assignee notification:", err);
+      jobs.push(
+        notifyUsers({
+          ...boardMeta,
+          type: NOTIFICATION_TYPES.assigneeAdded,
+          userIds: addedAssignees,
+        })
+      );
+    }
+
+    if (deadlineChanged) {
+      jobs.push(
+        notifyUsers({
+          ...boardMeta,
+          type: NOTIFICATION_TYPES.deadlineChanged,
+          userIds: card.assignees || [],
+          extra: { deadline: card.deadline || "" },
+        })
+      );
+    }
+
+    if (hasList && listId === "done" && previousListId !== "done") {
+      jobs.push(
+        notifyUsers({
+          ...boardMeta,
+          type: NOTIFICATION_TYPES.cardCompleted,
+          userIds: card.assignees || [],
+        })
+      );
+    }
+
+    if (jobs.length > 0) {
+      Promise.all(jobs).catch((err) => {
+        console.error("Error sending card update notifications:", err);
       });
     }
 
@@ -356,6 +400,21 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     found.list.cards[found.index] = card;
 
     await boardRef.set({ lists }, { merge: true });
+
+    const boardData = boardSnap.data();
+    notifyUsers({
+      type: NOTIFICATION_TYPES.commentAdded,
+      userIds: card.assignees || [],
+      actorId,
+      boardId,
+      boardName: boardData.name || "Untitled board",
+      urlName: boardData.urlName,
+      card,
+      extra: { commentPreview: text },
+    }).catch((err) => {
+      console.error("Error sending comment notification:", err);
+    });
+
     res.json({ card, lists });
   } catch (error) {
     console.error("Error adding comment:", error);
@@ -476,8 +535,10 @@ router.post("/:id/members", async (req, res) => {
     const memberProfiles = await memberProfilesForUids(members);
 
     if (!alreadyMember && userRecord.uid !== addedBy) {
-      notifyBoardMemberAdded({
+      notifyUsers({
+        type: NOTIFICATION_TYPES.boardMemberAdded,
         userIds: [userRecord.uid],
+        actorId: addedBy,
         boardId,
         boardName: boardData.name || "Untitled board",
         urlName: boardData.urlName,

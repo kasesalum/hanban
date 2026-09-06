@@ -7,6 +7,7 @@ import notificationRoutes from "./routes/notification.js";
 import boardRoutes from "./routes/board.js";
 import searchRoutes from "./routes/search.js";
 import { startDeadlineNotifications } from "./deadlineNotifications.js";
+import { isMailConfigured } from "./mailer.js";
 
 dotenv.config();
 
@@ -14,6 +15,9 @@ const app = express();
 app.use(express.json());
 
 console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
+console.log(
+  isMailConfigured() ? "SMTP configured" : "SMTP not configured; emails skipped"
+);
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 
 app.use("/api/user", notificationRoutes);

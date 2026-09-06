@@ -246,6 +246,7 @@ export type BoardCardFields = {
   assignees?: string[];
   label?: string;
   deadline?: string;
+  actorId?: string;
 };
 
 export async function createBoardCard(
@@ -266,6 +267,7 @@ export async function createBoardCard(
         assignees: fields.assignees || [],
         label: fields.label || "",
         deadline: fields.deadline || "",
+        actorId: fields.actorId || "",
       }),
     });
 
@@ -506,22 +508,43 @@ export async function globalSearch(query: string) {
   return [...boardResults, ...commandResults];
 }
 
+export type NotificationType =
+  | "assignee_added"
+  | "deadline_approaching"
+  | "deadline_overdue"
+  | "board_member_added"
+  | "comment_added"
+  | "deadline_changed"
+  | "card_completed";
+
 export type AppNotification = {
   id: string;
   userId: string;
-  type:
-    | "assignee_added"
-    | "deadline_approaching"
-    | "deadline_overdue"
-    | "board_member_added";
+  type: NotificationType;
   boardId: string;
   boardName: string;
   urlName: string;
   cardId: string;
   cardTitle: string;
+  commentPreview?: string;
   createdAt: string;
   read: boolean;
 };
+
+export type NotificationPrefs = {
+  emailEnabled: boolean;
+  email: Record<NotificationType, boolean>;
+};
+
+export const EMAIL_PREF_OPTIONS: { key: NotificationType; label: string }[] = [
+  { key: "assignee_added", label: "Assigned to a card" },
+  { key: "board_member_added", label: "Added to a board" },
+  { key: "deadline_approaching", label: "Deadline approaching" },
+  { key: "deadline_overdue", label: "Deadline overdue" },
+  { key: "comment_added", label: "Comments on your cards" },
+  { key: "deadline_changed", label: "Due date changes" },
+  { key: "card_completed", label: "Card completed" },
+];
 
 export async function getUserNotifications(
   userId: string
@@ -575,5 +598,40 @@ export async function markAllNotificationsRead(
   } catch (err) {
     console.error(err);
     return false;
+  }
+}
+
+export async function getNotificationPrefs(
+  userId: string
+): Promise<NotificationPrefs | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/user/notification-prefs?userId=${encodeURIComponent(userId)}`
+    );
+    if (!res.ok) throw new Error("Failed to fetch notification prefs");
+    const data = await res.json();
+    return data.notificationPrefs || null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export async function updateNotificationPrefs(
+  userId: string,
+  notificationPrefs: NotificationPrefs
+): Promise<NotificationPrefs | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/user/notification-prefs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, notificationPrefs }),
+    });
+    if (!res.ok) throw new Error("Failed to update notification prefs");
+    const data = await res.json();
+    return data.notificationPrefs || null;
+  } catch (err) {
+    console.error(err);
+    return null;
   }
 }
