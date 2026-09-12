@@ -130,7 +130,7 @@ router.post("/:id/cards", async (req, res) => {
       text: "created this card",
     });
 
-    if (assigneeIds.length > 0) {
+    if (assigneeIds.length > 0 && listId !== "done") {
       notifyUsers({
         type: NOTIFICATION_TYPES.assigneeAdded,
         userIds: assigneeIds,
@@ -337,6 +337,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       pendingActivity.map((entry) => addActivity(boardId, cardId, entry))
     );
 
+    const finalListId = hasList ? listId : previousListId;
     const boardMeta = {
       boardId,
       boardName: boardData.name || "Untitled board",
@@ -346,35 +347,27 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     };
     const jobs = [];
 
-    if (addedAssignees.length > 0) {
-      jobs.push(
-        notifyUsers({
-          ...boardMeta,
-          type: NOTIFICATION_TYPES.assigneeAdded,
-          userIds: addedAssignees,
-        })
-      );
-    }
+    if (finalListId !== "done") {
+      if (addedAssignees.length > 0) {
+        jobs.push(
+          notifyUsers({
+            ...boardMeta,
+            type: NOTIFICATION_TYPES.assigneeAdded,
+            userIds: addedAssignees,
+          })
+        );
+      }
 
-    if (deadlineChanged) {
-      jobs.push(
-        notifyUsers({
-          ...boardMeta,
-          type: NOTIFICATION_TYPES.deadlineChanged,
-          userIds: card.assignees || [],
-          extra: { deadline: card.deadline || "" },
-        })
-      );
-    }
-
-    if (hasList && listId === "done" && previousListId !== "done") {
-      jobs.push(
-        notifyUsers({
-          ...boardMeta,
-          type: NOTIFICATION_TYPES.cardCompleted,
-          userIds: card.assignees || [],
-        })
-      );
+      if (deadlineChanged) {
+        jobs.push(
+          notifyUsers({
+            ...boardMeta,
+            type: NOTIFICATION_TYPES.deadlineChanged,
+            userIds: card.assignees || [],
+            extra: { deadline: card.deadline || "" },
+          })
+        );
+      }
     }
 
     if (jobs.length > 0) {
@@ -496,18 +489,20 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     });
 
     const boardData = boardSnap.data();
-    notifyUsers({
-      type: NOTIFICATION_TYPES.commentAdded,
-      userIds: found.card.assignees || [],
-      actorId,
-      boardId,
-      boardName: boardData.name || "Untitled board",
-      urlName: boardData.urlName,
-      card: found.card,
-      extra: { commentPreview: htmlToPlain(html) },
-    }).catch((err) => {
-      console.error("Error sending comment notification:", err);
-    });
+    if (found.list.id !== "done") {
+      notifyUsers({
+        type: NOTIFICATION_TYPES.commentAdded,
+        userIds: found.card.assignees || [],
+        actorId,
+        boardId,
+        boardName: boardData.name || "Untitled board",
+        urlName: boardData.urlName,
+        card: found.card,
+        extra: { commentPreview: htmlToPlain(html) },
+      }).catch((err) => {
+        console.error("Error sending comment notification:", err);
+      });
+    }
 
     res.json({
       comment: result.comment,
