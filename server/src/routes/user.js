@@ -9,6 +9,7 @@ import { invalidateUserCache, searchUsers } from "../users.js";
 import {
   decodeImagePayload,
   extForContentType,
+  publicBaseFromReq,
   uploadImageBuffer,
 } from "../storageUpload.js";
 import { randomUUID } from "crypto";
@@ -181,7 +182,12 @@ router.post("/avatar", async (req, res) => {
 
     const buffer = decodeImagePayload(contentType, req.body?.data);
     const path = `avatars/${userId}/${randomUUID()}.${extForContentType(contentType)}`;
-    const uploaded = await uploadImageBuffer(path, contentType, buffer);
+    const uploaded = await uploadImageBuffer(
+      path,
+      contentType,
+      buffer,
+      publicBaseFromReq(req)
+    );
 
     await admin.auth().updateUser(userId, { photoURL: uploaded.url });
     invalidateUserCache();

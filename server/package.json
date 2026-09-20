@@ -14,7 +14,7 @@
   "description": "",
   "main": "src/init.js",
   "scripts": {
-    "test": "jest",
+    "test": "jest && node --test src/*.test.js",
     "dev": "nodemon .",
     "algolia:backfill": "node src/scripts/backfillAlgolia.js"
   },

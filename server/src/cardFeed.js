@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { db, getBucket } from "./firebase.js";
+import { deleteLocalPrefix } from "./localUpload.js";
 import {
   htmlToPlain,
   looksLikeHtml,
@@ -185,12 +186,19 @@ export async function deleteCardFeed(boardId, cardId) {
 
   try {
     const bucket = getBucket();
-    if (!bucket) return;
-    const [files] = await bucket.getFiles({
-      prefix: `boards/${boardId}/cards/${cardId}/`,
-    });
-    await Promise.all(files.map((file) => file.delete().catch(() => {})));
+    if (bucket) {
+      const [files] = await bucket.getFiles({
+        prefix: `boards/${boardId}/cards/${cardId}/`,
+      });
+      await Promise.all(files.map((file) => file.delete().catch(() => {})));
+    }
   } catch (err) {
     console.error("Error deleting card attachments:", err);
+  }
+
+  try {
+    await deleteLocalPrefix(`boards/${boardId}/cards/${cardId}`);
+  } catch (err) {
+    console.error("Error deleting local card attachments:", err);
   }
 }

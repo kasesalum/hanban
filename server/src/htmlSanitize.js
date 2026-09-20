@@ -50,7 +50,8 @@ export function htmlToPlain(html) {
 }
 
 export function isEmptyHtml(html) {
-  return !htmlToPlain(html);
+  if (htmlToPlain(html)) return false;
+  return !/<img\b/i.test(String(html || ""));
 }
 
 export function textToHtml(text) {

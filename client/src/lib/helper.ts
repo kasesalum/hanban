@@ -540,8 +540,9 @@ export async function uploadCardImage(
         }),
       }
     );
-    if (!res.ok) throw new Error("Failed to upload image");
-    return await res.json();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || "Failed to upload image");
+    return body;
   } catch (err) {
     console.error(err);
     return null;

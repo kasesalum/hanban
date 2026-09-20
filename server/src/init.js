@@ -8,6 +8,7 @@ import boardRoutes from "./routes/board.js";
 import searchRoutes from "./routes/search.js";
 import { startDeadlineNotifications } from "./deadlineNotifications.js";
 import { isMailConfigured } from "./mailer.js";
+import { localUploadRoot } from "./localUpload.js";
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ console.log(
   isMailConfigured() ? "SMTP configured" : "SMTP not configured; emails skipped"
 );
 app.use(cors({ origin: process.env.FRONTEND_URL }));
+app.use("/uploads", express.static(localUploadRoot()));
 
 app.use("/api/user", notificationRoutes);
 app.use("/api/user", userRoutes);

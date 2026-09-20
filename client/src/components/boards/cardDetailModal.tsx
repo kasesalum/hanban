@@ -426,7 +426,16 @@ export default function CardDetailModal({
     setEditingDescription(false);
     setDescription(html);
     setDescriptionAttachments(attachments);
-    if (html === (currentCard.description || "")) return;
+    const prevHtml = currentCard.description || "";
+    const prevAttachments = currentCard.descriptionAttachments || [];
+    const attachmentsChanged =
+      attachments.length !== prevAttachments.length ||
+      attachments.some(
+        (item, index) =>
+          item.url !== prevAttachments[index]?.url ||
+          item.path !== prevAttachments[index]?.path
+      );
+    if (html === prevHtml && !attachmentsChanged) return;
     await save({ description: html, descriptionAttachments: attachments });
   }
 

@@ -24,7 +24,8 @@ export function htmlToPlain(html: string) {
 }
 
 export function isEmptyHtml(html: string) {
-  return !htmlToPlain(html);
+  if (htmlToPlain(html)) return false;
+  return !/<img\b/i.test(String(html || ""));
 }
 
 export function RichTextHtml({
@@ -76,6 +77,37 @@ function restoreSelection(editor: HTMLElement | null, range: Range | null) {
   if (!selection) return;
   selection.removeAllRanges();
   if (range) selection.addRange(range);
+}
+
+function isRangeInEditor(editor: HTMLElement, range: Range | null): range is Range {
+  if (!range) return false;
+  try {
+    return editor.contains(range.commonAncestorContainer);
+  } catch {
+    return false;
+  }
+}
+
+function rangeAtEnd(editor: HTMLElement): Range {
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  return range;
+}
+
+function insertNodeAtCaret(
+  editor: HTMLElement,
+  node: Node,
+  saved: Range | null
+) {
+  const range = isRangeInEditor(editor, saved) ? saved : rangeAtEnd(editor);
+  restoreSelection(editor, range);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 function ToolbarButton({
@@ -211,8 +243,13 @@ export default function RichTextEditor({
       const uploaded = await uploadImage(file);
       if (!uploaded) return;
       attachmentsRef.current = [...attachmentsRef.current, uploaded];
-      editorRef.current?.focus();
-      runCommand("insertHTML", `<img src="${uploaded.url}" alt="">`);
+      const editor = editorRef.current;
+      if (!editor?.isConnected) return;
+      const image = document.createElement("img");
+      image.src = uploaded.url;
+      image.alt = "";
+      insertNodeAtCaret(editor, image, savedRangeRef.current);
+      savedRangeRef.current = null;
       emit(onChange);
     } finally {
       pickingFileRef.current = false;
@@ -231,6 +268,7 @@ export default function RichTextEditor({
         const wrapper = event.currentTarget;
         window.setTimeout(() => {
           if (pickingFileRef.current) return;
+          if (!editorRef.current?.isConnected) return;
           if (wrapper.contains(document.activeElement)) return;
           emit(onBlur);
         }, 200);
@@ -261,6 +299,7 @@ export default function RichTextEditor({
               label="Image"
               onClick={() => {
                 pickingFileRef.current = true;
+                savedRangeRef.current = saveSelection(editorRef.current);
                 fileRef.current?.click();
               }}
             >

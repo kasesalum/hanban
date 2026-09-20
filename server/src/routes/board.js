@@ -32,6 +32,7 @@ import {
 import {
   decodeImagePayload,
   extForContentType,
+  publicBaseFromReq,
   uploadImageBuffer,
 } from "../storageUpload.js";
 import {
@@ -477,7 +478,12 @@ router.post("/:id/cards/:cardId/images", async (req, res) => {
 
     const buffer = decodeImagePayload(contentType, req.body?.data);
     const path = `boards/${boardId}/cards/${cardId}/${kind}/${randomUUID()}.${extForContentType(contentType)}`;
-    const uploaded = await uploadImageBuffer(path, contentType, buffer);
+    const uploaded = await uploadImageBuffer(
+      path,
+      contentType,
+      buffer,
+      publicBaseFromReq(req)
+    );
     res.json(uploaded);
   } catch (error) {
     console.error("Error uploading card image:", error);

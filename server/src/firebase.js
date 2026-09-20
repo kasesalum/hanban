@@ -10,6 +10,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   storageBucket:
     process.env.FIREBASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
     `${serviceAccount.project_id}.firebasestorage.app`,
 });
 
