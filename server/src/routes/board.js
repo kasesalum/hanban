@@ -186,8 +186,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const hasTitle = typeof title === "string";
     const hasDescription = typeof description === "string";
     const hasAssignees = Array.isArray(assignees);
-    const hasLabels =
-      Array.isArray(cardLabels) || typeof label === "string";
+    const hasLabels = Array.isArray(cardLabels);
     const hasDeadline = typeof deadline === "string";
 
     if (
@@ -290,7 +289,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
 
     if (hasLabels) {
       const next = parseCardLabelIds(
-        { label, labels: cardLabels },
+        { labels: cardLabels },
         labels
       );
       if (!next) {
@@ -318,9 +317,9 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
           type: "label",
           text: bits.join(" and "),
         });
-        card.labels = next;
-        delete card.label;
       }
+      card.labels = next;
+      delete card.label;
     }
 
     if (hasDeadline) {
@@ -358,6 +357,10 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     }
 
     card = stripCardFeed(card);
+    if (!Array.isArray(card.labels)) {
+      card.labels = normalizeCardLabelIds(card);
+    }
+    delete card.label;
     found.list.cards[found.index] = card;
 
     if (hasList && listId !== found.list.id) {

@@ -214,6 +214,10 @@ export default function CardDetailModal({
   const membersRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const creatingRef = useRef(false);
+  const persistedRef = useRef(!isNew);
+  const skipHydrateLabelsRef = useRef(false);
+  const selectedLabelsRef = useRef<string[]>([]);
+  const saveChainRef = useRef(Promise.resolve());
   const titleRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<() => void>(() => {});
 
@@ -227,7 +231,13 @@ export default function CardDetailModal({
     setDescription(card.description || "");
     setDescriptionAttachments(card.descriptionAttachments || []);
     setAssignees(card.assignees || []);
-    setSelectedLabels(cardLabelIds(card));
+    if (skipHydrateLabelsRef.current) {
+      skipHydrateLabelsRef.current = false;
+    } else {
+      const ids = cardLabelIds(card);
+      selectedLabelsRef.current = ids;
+      setSelectedLabels(ids);
+    }
     setDeadline(card.deadline || (isNew ? tomorrowISO() : ""));
     setEditingDescription(false);
     setComment("");
@@ -235,16 +245,8 @@ export default function CardDetailModal({
     setCommentKey((key) => key + 1);
     setConfirmDelete(false);
     creatingRef.current = false;
-  }, [
-    card?.id,
-    card?.title,
-    card?.description,
-    card?.labels?.join(","),
-    card?.label,
-    card?.deadline,
-    card?.assignees?.join(","),
-    isNew,
-  ]);
+    persistedRef.current = !isNew;
+  }, [card?.id, isNew]);
 
   useEffect(() => {
     if (open && isNew) {
@@ -334,34 +336,32 @@ export default function CardDetailModal({
     );
   }
 
-  async function save(fields: CardFields): Promise<boolean> {
-    if (fields.assignees) setAssignees(fields.assignees);
-    if (fields.labels !== undefined) setSelectedLabels(fields.labels);
-    if (fields.deadline !== undefined) setDeadline(fields.deadline);
-
-    if (isNew) {
-      if (!hasDraftContent(fields) || !onCreate || creatingRef.current) {
-        return false;
-      }
-      const nextTitle = (fields.title ?? title).trim() || "Untitled";
+  async function persist(payload: CardFields): Promise<boolean> {
+    if (!persistedRef.current) {
+      if (!hasDraftContent(payload) || !onCreate) return false;
       creatingRef.current = true;
-      setBusy(true);
+      skipHydrateLabelsRef.current = true;
       const created = await onCreate({
-        title: nextTitle,
-        description: fields.description ?? description,
-        assignees: fields.assignees ?? assignees,
-        labels: fields.labels ?? selectedLabels,
-        deadline: fields.deadline ?? deadline,
+        title: (payload.title ?? title).trim() || "Untitled",
+        description: payload.description ?? description,
+        assignees: payload.assignees ?? assignees,
+        labels: payload.labels ?? selectedLabelsRef.current,
+        deadline: payload.deadline ?? deadline,
       });
-      if (!created) creatingRef.current = false;
-      setBusy(false);
+      creatingRef.current = false;
+      if (created) persistedRef.current = true;
+      else skipHydrateLabelsRef.current = false;
       return created;
     }
 
     setBusy(true);
-    await onUpdate(fields);
-    if (boardId && currentCard.id) {
-      const data = await getCardFeed(boardId, currentCard.id);
+    await onUpdate({
+      ...payload,
+      labels: payload.labels ?? selectedLabelsRef.current,
+    });
+    const cardId = currentCard.id;
+    if (boardId && cardId && persistedRef.current && !cardId.startsWith("__new__")) {
+      const data = await getCardFeed(boardId, cardId);
       if (data) {
         setFeedComments(data.comments || []);
         setFeedActivity(data.activity || []);
@@ -369,6 +369,27 @@ export default function CardDetailModal({
     }
     setBusy(false);
     return true;
+  }
+
+  function save(fields: CardFields): Promise<boolean> {
+    if (fields.assignees) setAssignees(fields.assignees);
+    if (fields.labels !== undefined) {
+      selectedLabelsRef.current = fields.labels;
+      setSelectedLabels(fields.labels);
+    }
+    if (fields.deadline !== undefined) setDeadline(fields.deadline);
+
+    const payload: CardFields = {
+      ...fields,
+      labels: fields.labels ?? selectedLabelsRef.current,
+    };
+
+    const result = saveChainRef.current.then(() => persist(payload));
+    saveChainRef.current = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
   }
 
   async function handleClose() {
@@ -627,12 +648,12 @@ export default function CardDetailModal({
                             <input
                               type="checkbox"
                               checked={checked}
-                              disabled={busy}
                               onChange={() => {
-                                const next = checked
-                                  ? selectedLabels.filter((id) => id !== item.id)
-                                  : [...selectedLabels, item.id];
-                                save({ labels: next });
+                                const current = selectedLabelsRef.current;
+                                const next = current.includes(item.id)
+                                  ? current.filter((id) => id !== item.id)
+                                  : [...current, item.id];
+                                void save({ labels: next });
                               }}
                             />
                             <LabelChip

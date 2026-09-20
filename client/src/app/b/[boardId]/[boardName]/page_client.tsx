@@ -39,7 +39,7 @@ import {
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { ArrowUpDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { DragEvent, useEffect, useState } from "react";
+import { DragEvent, useEffect, useRef, useState } from "react";
 
 interface BoardPageProps {
   boardId: string;
@@ -193,6 +193,8 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [membersOpen, setMembersOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<Record<string, SortKey>>({});
+  const openCardRef = useRef(openCard);
+  openCardRef.current = openCard;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -291,8 +293,9 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     labels?: string[];
     deadline?: string;
   }) => {
-    if (!openCard || openCard.isNew) return;
-    const result = await updateBoardCard(boardId, openCard.card.id, {
+    const current = openCardRef.current;
+    if (!current || current.isNew) return;
+    const result = await updateBoardCard(boardId, current.card.id, {
       ...fields,
       actorId: user?.uid,
     });
@@ -335,14 +338,16 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     });
     if (!result) return false;
 
-    setBoard((prev) =>
-      prev ? { ...prev, lists: result.lists } : { id: boardId, lists: result.lists }
-    );
-    setOpenCard({
+    const nextOpen = {
       card: result.card,
       listId: openCard.listId,
       isNew: false,
-    });
+    };
+    openCardRef.current = nextOpen;
+    setBoard((prev) =>
+      prev ? { ...prev, lists: result.lists } : { id: boardId, lists: result.lists }
+    );
+    setOpenCard(nextOpen);
     return true;
   };
 
