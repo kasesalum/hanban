@@ -45,3 +45,26 @@ export function withDefaultLabels(data) {
   }
   return DEFAULT_LABELS.map((label) => ({ ...label }));
 }
+
+export function normalizeCardLabelIds(card) {
+  if (Array.isArray(card?.labels)) {
+    return [...new Set(card.labels.map((id) => String(id)).filter(Boolean))];
+  }
+  if (card?.label) return [String(card.label)];
+  return [];
+}
+
+export function parseCardLabelIds(body, catalog) {
+  let ids;
+  if (Array.isArray(body?.labels)) {
+    ids = body.labels.map((id) => String(id));
+  } else if (typeof body?.label === "string" && body.label) {
+    ids = [body.label];
+  } else {
+    ids = [];
+  }
+  ids = [...new Set(ids.filter(Boolean))];
+  const allowed = new Set((catalog || []).map((item) => item.id));
+  if (ids.some((id) => !allowed.has(id))) return null;
+  return ids;
+}

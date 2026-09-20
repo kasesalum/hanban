@@ -2,6 +2,7 @@
 
 import BoardCard, {
   DEFAULT_BOARD_LABELS,
+  cardLabelIds,
   type BoardLabel,
   type MemberProfile,
 } from "@/components/boards/boardCard";
@@ -50,6 +51,7 @@ type TaskCard = {
   title: string;
   description?: string;
   assignees?: string[];
+  labels?: string[];
   label?: string;
   deadline?: string;
   createdAt?: string;
@@ -94,7 +96,7 @@ function newDraftCard(): DetailCard {
     title: "",
     description: "",
     assignees: [],
-    label: "",
+    labels: [],
     deadline: tomorrowISO(),
     comments: [],
     activity: [],
@@ -244,7 +246,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     ) {
       return false;
     }
-    if (labelFilter && card.label !== labelFilter) return false;
+    if (labelFilter && !cardLabelIds(card).includes(labelFilter)) return false;
     return true;
   };
 
@@ -286,7 +288,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     description?: string;
     descriptionAttachments?: { url: string; path: string }[];
     assignees?: string[];
-    label?: string;
+    labels?: string[];
     deadline?: string;
   }) => {
     if (!openCard || openCard.isNew) return;
@@ -323,7 +325,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     title: string;
     description?: string;
     assignees?: string[];
-    label?: string;
+    labels?: string[];
     deadline?: string;
   }) => {
     if (!openCard?.isNew) return false;
@@ -507,7 +509,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                               name: card.title,
                               description: card.description,
                               assignees: card.assignees,
-                              label: card.label,
+                              labelIds: cardLabelIds(card),
                               deadline: card.deadline,
                             }}
                           />

@@ -252,7 +252,7 @@ export type BoardCardFields = {
   title: string;
   description?: string;
   assignees?: string[];
-  label?: string;
+  labels?: string[];
   deadline?: string;
   actorId?: string;
 };
@@ -273,7 +273,7 @@ export async function createBoardCard(
         title: fields.title,
         description: fields.description || "",
         assignees: fields.assignees || [],
-        label: fields.label || "",
+        labels: fields.labels || [],
         deadline: fields.deadline || "",
         actorId: fields.actorId || "",
       }),
@@ -430,7 +430,7 @@ export type CardUpdateFields = {
   title?: string;
   description?: string;
   assignees?: string[];
-  label?: string;
+  labels?: string[];
   deadline?: string;
   listId?: string;
   actorId?: string;

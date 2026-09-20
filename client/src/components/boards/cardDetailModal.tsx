@@ -6,6 +6,7 @@ import { Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
 import {
   LabelChip,
   assigneeLabel,
+  cardLabelIds,
   type BoardLabel,
   type MemberProfile,
 } from "@/components/boards/boardCard";
@@ -46,6 +47,7 @@ export type DetailCard = {
   description?: string;
   descriptionAttachments?: RichAttachment[];
   assignees?: string[];
+  labels?: string[];
   label?: string;
   deadline?: string;
   createdAt?: string;
@@ -58,7 +60,7 @@ type CardFields = {
   description?: string;
   descriptionAttachments?: RichAttachment[];
   assignees?: string[];
-  label?: string;
+  labels?: string[];
   deadline?: string;
 };
 
@@ -80,7 +82,7 @@ interface CardDetailModalProps {
     title: string;
     description?: string;
     assignees?: string[];
-    label?: string;
+    labels?: string[];
     deadline?: string;
   }) => Promise<boolean>;
   onComment: (html: string, attachments: RichAttachment[]) => Promise<void>;
@@ -193,7 +195,7 @@ export default function CardDetailModal({
     RichAttachment[]
   >([]);
   const [assignees, setAssignees] = useState<string[]>([]);
-  const [label, setLabel] = useState("");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [deadline, setDeadline] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [comment, setComment] = useState("");
@@ -225,7 +227,7 @@ export default function CardDetailModal({
     setDescription(card.description || "");
     setDescriptionAttachments(card.descriptionAttachments || []);
     setAssignees(card.assignees || []);
-    setLabel(card.label || "");
+    setSelectedLabels(cardLabelIds(card));
     setDeadline(card.deadline || (isNew ? tomorrowISO() : ""));
     setEditingDescription(false);
     setComment("");
@@ -237,6 +239,7 @@ export default function CardDetailModal({
     card?.id,
     card?.title,
     card?.description,
+    card?.labels?.join(","),
     card?.label,
     card?.deadline,
     card?.assignees?.join(","),
@@ -319,21 +322,21 @@ export default function CardDetailModal({
     const nextTitle = (fields?.title ?? title).trim();
     const nextDescription = fields?.description ?? description;
     const nextAssignees = fields?.assignees ?? assignees;
-    const nextLabel = fields?.label ?? label;
+    const nextLabelIds = fields?.labels ?? selectedLabels;
     const nextDeadline = fields?.deadline ?? deadline;
     const initialDeadline = currentCard.deadline || tomorrowISO();
     return (
       Boolean(nextTitle) ||
       !isEmptyHtml(nextDescription) ||
       nextAssignees.length > 0 ||
-      Boolean(nextLabel) ||
+      nextLabelIds.length > 0 ||
       Boolean(nextDeadline && nextDeadline !== initialDeadline)
     );
   }
 
   async function save(fields: CardFields): Promise<boolean> {
     if (fields.assignees) setAssignees(fields.assignees);
-    if (fields.label !== undefined) setLabel(fields.label);
+    if (fields.labels !== undefined) setSelectedLabels(fields.labels);
     if (fields.deadline !== undefined) setDeadline(fields.deadline);
 
     if (isNew) {
@@ -347,7 +350,7 @@ export default function CardDetailModal({
         title: nextTitle,
         description: fields.description ?? description,
         assignees: fields.assignees ?? assignees,
-        label: fields.label ?? label,
+        labels: fields.labels ?? selectedLabels,
         deadline: fields.deadline ?? deadline,
       });
       if (!created) creatingRef.current = false;
@@ -595,51 +598,51 @@ export default function CardDetailModal({
                 </p>
                 <div className="relative" ref={labelsRef}>
                   <div className="flex flex-wrap items-center gap-1">
-                    {label ? (
+                    {selectedLabels.map((id) => (
                       <LabelChip
-                        labelId={label}
+                        key={id}
+                        labelId={id}
                         labels={labels}
                         className="text-xs px-2 py-1"
                       />
-                    ) : null}
+                    ))}
                     <button
                       type="button"
                       onClick={() => setLabelsOpen((prev) => !prev)}
                       className="size-7 rounded-md border border-dashed border-border text-gray-300 hover:text-white flex items-center justify-center"
-                      aria-label="Edit label"
+                      aria-label="Edit labels"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   {labelsOpen && (
-                    <div className="absolute z-20 mt-2 w-48 rounded-md border border-border bg-background-alt p-2 shadow-xl">
-                      <button
-                        type="button"
-                        className="block w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-border-hover text-gray-300"
-                        onClick={() => {
-                          save({ label: "" });
-                          setLabelsOpen(false);
-                        }}
-                      >
-                        No label
-                      </button>
-                      {labels.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="flex w-full items-center gap-2 text-left text-sm px-2 py-1.5 rounded-md hover:bg-border-hover"
-                          onClick={() => {
-                            save({ label: item.id });
-                            setLabelsOpen(false);
-                          }}
-                        >
-                          <LabelChip
-                            labelId={item.id}
-                            labels={labels}
-                            className="text-[10px] px-1.5 py-0.5"
-                          />
-                        </button>
-                      ))}
+                    <div className="absolute z-20 mt-2 w-48 rounded-md border border-border bg-background-alt p-2 shadow-xl max-h-48 overflow-y-auto">
+                      {labels.map((item) => {
+                        const checked = selectedLabels.includes(item.id);
+                        return (
+                          <label
+                            key={item.id}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-gray-200 hover:bg-border-hover"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={busy}
+                              onChange={() => {
+                                const next = checked
+                                  ? selectedLabels.filter((id) => id !== item.id)
+                                  : [...selectedLabels, item.id];
+                                save({ labels: next });
+                              }}
+                            />
+                            <LabelChip
+                              labelId={item.id}
+                              labels={labels}
+                              className="text-[10px] px-1.5 py-0.5"
+                            />
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

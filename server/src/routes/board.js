@@ -6,6 +6,8 @@ import { algoliasearch } from "algoliasearch";
 import { db } from "../firebase.js";
 import {
   HEX_COLOR,
+  normalizeCardLabelIds,
+  parseCardLabelIds,
   withDefaultLabels,
   withDefaultLists,
 } from "../boardLists.js";
@@ -77,8 +79,16 @@ function findCard(lists, cardId) {
 router.post("/:id/cards", async (req, res) => {
   try {
     const boardId = req.params.id;
-    const { listId, title, description, assignees, label, deadline, actorId } =
-      req.body || {};
+    const {
+      listId,
+      title,
+      description,
+      assignees,
+      label,
+      labels: cardLabels,
+      deadline,
+      actorId,
+    } = req.body || {};
     const actor = String(actorId || "");
 
     if (!listId) {
@@ -107,7 +117,11 @@ router.post("/:id/cards", async (req, res) => {
       return res.status(400).json({ error: "Invalid assignee" });
     }
 
-    if (label && !labels.some((item) => item.id === label)) {
+    const labelIds = parseCardLabelIds(
+      { label, labels: cardLabels },
+      labels
+    );
+    if (!labelIds) {
       return res.status(400).json({ error: "Invalid label" });
     }
 
@@ -116,7 +130,7 @@ router.post("/:id/cards", async (req, res) => {
       title: String(title || "").trim().substring(0, 120) || "Untitled",
       description: description ? sanitizeHtml(String(description)) : "",
       assignees: assigneeIds,
-      label: label || "",
+      labels: labelIds,
       deadline: deadline ? String(deadline) : "",
       createdAt: new Date().toISOString(),
       createdBy: actor,
@@ -161,6 +175,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       description,
       assignees,
       label,
+      labels: cardLabels,
       deadline,
       actorId,
       descriptionAttachments,
@@ -171,7 +186,8 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const hasTitle = typeof title === "string";
     const hasDescription = typeof description === "string";
     const hasAssignees = Array.isArray(assignees);
-    const hasLabel = typeof label === "string";
+    const hasLabels =
+      Array.isArray(cardLabels) || typeof label === "string";
     const hasDeadline = typeof deadline === "string";
 
     if (
@@ -179,7 +195,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       !hasTitle &&
       !hasDescription &&
       !hasAssignees &&
-      !hasLabel &&
+      !hasLabels &&
       !hasDeadline
     ) {
       return res.status(400).json({ error: "Missing fields" });
@@ -272,20 +288,38 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       }
     }
 
-    if (hasLabel) {
-      const next = String(label);
-      if (next && !labels.some((item) => item.id === next)) {
+    if (hasLabels) {
+      const next = parseCardLabelIds(
+        { label, labels: cardLabels },
+        labels
+      );
+      if (!next) {
         return res.status(400).json({ error: "Invalid label" });
       }
-      if (next !== (card.label || "")) {
-        const labelName =
-          labels.find((item) => item.id === next)?.name || "none";
+      const prev = normalizeCardLabelIds(card);
+      const added = next.filter((id) => !prev.includes(id));
+      const removed = prev.filter((id) => !next.includes(id));
+      if (added.length || removed.length) {
+        const nameFor = (id) =>
+          labels.find((item) => item.id === id)?.name || id;
+        const bits = [];
+        if (added.length) {
+          bits.push(
+            `added ${added.map((id) => `“${nameFor(id)}”`).join(", ")}`
+          );
+        }
+        if (removed.length) {
+          bits.push(
+            `removed ${removed.map((id) => `“${nameFor(id)}”`).join(", ")}`
+          );
+        }
         pendingActivity.push({
           userId: actor,
           type: "label",
-          text: next ? `set the label to “${labelName}”` : "removed the label",
+          text: bits.join(" and "),
         });
-        card.label = next;
+        card.labels = next;
+        delete card.label;
       }
     }
 
@@ -573,11 +607,14 @@ router.put("/:id/labels", async (req, res) => {
     const allowed = new Set(labels.map((label) => label.id));
     const lists = cloneLists(boardSnap.data()).map((list) => ({
       ...list,
-      cards: list.cards.map((card) =>
-        card.label && !allowed.has(card.label)
-          ? { ...card, label: "" }
-          : card
-      ),
+      cards: list.cards.map((card) => {
+        const nextIds = normalizeCardLabelIds(card).filter((id) =>
+          allowed.has(id)
+        );
+        const next = { ...card, labels: nextIds };
+        delete next.label;
+        return next;
+      }),
     }));
 
     await boardRef.set({ labels, lists }, { merge: true });

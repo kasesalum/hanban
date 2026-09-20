@@ -22,6 +22,17 @@ export function findBoardLabel(labels: BoardLabel[] | undefined, id?: string) {
   return (labels || DEFAULT_BOARD_LABELS).find((label) => label.id === id);
 }
 
+export function cardLabelIds(card?: {
+  labels?: string[];
+  label?: string;
+}): string[] {
+  if (Array.isArray(card?.labels)) {
+    return [...new Set(card.labels.filter(Boolean))];
+  }
+  if (card?.label) return [card.label];
+  return [];
+}
+
 export function LabelChip({
   labelId,
   labels,
@@ -58,6 +69,7 @@ export interface BoardCardData {
   description?: string;
   assignees?: string[];
   label?: string;
+  labelIds?: string[];
   deadline?: string;
 }
 
@@ -118,9 +130,13 @@ export default function BoardCard({
   labels,
   memberProfiles,
 }: BoardCardProps) {
-  const label = findBoardLabel(labels, board.label);
+  const labelIds = board.labelIds?.length
+    ? board.labelIds
+    : board.label
+      ? [board.label]
+      : [];
   const hasMeta =
-    Boolean(label) ||
+    labelIds.length > 0 ||
     Boolean(board.deadline) ||
     (board.assignees && board.assignees.length > 0);
   const clickable = Boolean(onOpen || openBoard);
@@ -230,7 +246,9 @@ export default function BoardCard({
               </p>
             )}
             <div className="flex flex-wrap gap-1">
-              <LabelChip labelId={board.label} labels={labels} />
+              {labelIds.map((id) => (
+                <LabelChip key={id} labelId={id} labels={labels} />
+              ))}
               {board.deadline && (
                 <span
                   className={`rounded border ${
