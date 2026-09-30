@@ -6,6 +6,7 @@ import { algoliasearch } from "algoliasearch";
 import { db } from "../firebase.js";
 import {
   HEX_COLOR,
+  hasCardPatchFields,
   normalizeCardLabelIds,
   parseCardLabelIds,
   withDefaultLabels,
@@ -187,17 +188,10 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const hasTitle = typeof title === "string";
     const hasDescription = typeof description === "string";
     const hasAssignees = Array.isArray(assignees);
-    const hasLabels = Array.isArray(cardLabels);
+    const hasLabels = Array.isArray(cardLabels) || typeof label === "string";
     const hasDeadline = typeof deadline === "string";
 
-    if (
-      !hasList &&
-      !hasTitle &&
-      !hasDescription &&
-      !hasAssignees &&
-      !hasLabels &&
-      !hasDeadline
-    ) {
+    if (!hasCardPatchFields(req.body)) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
@@ -290,7 +284,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
 
     if (hasLabels) {
       const next = parseCardLabelIds(
-        { labels: cardLabels },
+        { label, labels: cardLabels },
         labels
       );
       if (!next) {

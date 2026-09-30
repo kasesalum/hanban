@@ -68,3 +68,16 @@ export function parseCardLabelIds(body, catalog) {
   if (ids.some((id) => !allowed.has(id))) return null;
   return ids;
 }
+
+export function hasCardPatchFields(body) {
+  const payload = body || {};
+  return (
+    (typeof payload.listId === "string" && payload.listId.length > 0) ||
+    typeof payload.title === "string" ||
+    typeof payload.description === "string" ||
+    Array.isArray(payload.assignees) ||
+    Array.isArray(payload.labels) ||
+    typeof payload.label === "string" ||
+    typeof payload.deadline === "string"
+  );
+}
