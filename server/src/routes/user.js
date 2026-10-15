@@ -3,7 +3,7 @@ import express from "express";
 import { db } from "../firebase.js";
 import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
-import { DEFAULT_LABELS, DEFAULT_LISTS } from "../boardLists.js";
+import { DEFAULT_LABELS, algoliaBoardRecord, emptyBoardLists } from "../boardLists.js";
 import { ensureFeatureBoardMember } from "../featureBoard.js";
 import { invalidateUserCache, searchUsers } from "../users.js";
 import {
@@ -135,7 +135,7 @@ router.post("/createBoard", async (req, res) => {
       privacy: privacy,
       members: [userId],
       background: background,
-      lists: DEFAULT_LISTS.map((list) => ({ ...list, cards: [] })),
+      lists: emptyBoardLists(),
       labels: DEFAULT_LABELS.map((label) => ({ ...label })),
     };
 
@@ -154,9 +154,10 @@ router.post("/createBoard", async (req, res) => {
         indexName: boardIndexName,
         objects: [
           {
-            objectID: newBoardDoc.id,
-            ...newBoardData,
-            createdAt: newBoardData.createdAt.toISOString(),
+            ...algoliaBoardRecord(newBoardDoc.id, {
+              ...newBoardData,
+              createdAt: newBoardData.createdAt.toISOString(),
+            }),
           },
         ],
       });

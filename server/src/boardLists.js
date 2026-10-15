@@ -14,12 +14,79 @@ export const DEFAULT_LABELS = [
 
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
+export function emptyBoardLists() {
+  return DEFAULT_LISTS.map((list) => ({
+    id: list.id,
+    title: list.title,
+    cardIds: [],
+  }));
+}
+
+export function cloneLists(data) {
+  const anyNested = (data?.lists || []).some((list) => Array.isArray(list.cards));
+  return withDefaultLists(data).map((list) => {
+    const next = {
+      id: list.id,
+      title: list.title,
+      cardIds: Array.isArray(list.cardIds)
+        ? [...list.cardIds]
+        : (list.cards || []).map((card) => card.id).filter(Boolean),
+    };
+    if (anyNested || Array.isArray(list.cards)) {
+      next.cards = (list.cards || []).map((card) => ({ ...card }));
+    }
+    return next;
+  });
+}
+
+export function listsHaveNestedCards(data) {
+  return (data?.lists || []).some((list) => Array.isArray(list.cards));
+}
+
+export function listsPayload(lists, options = {}) {
+  const nested = options.nested === true;
+  return (lists || []).map((list) => {
+    const cardIds = Array.isArray(list.cardIds)
+      ? list.cardIds
+      : (list.cards || []).map((card) => card.id).filter(Boolean);
+    const next = {
+      id: list.id,
+      title: list.title,
+      cardIds,
+    };
+    if (nested && Array.isArray(list.cards)) {
+      next.cards = list.cards;
+    }
+    return next;
+  });
+}
+
+export function algoliaBoardRecord(id, data) {
+  const { lists, ...rest } = data || {};
+  return {
+    objectID: id,
+    ...rest,
+    lists: (lists || []).map((list) => ({
+      id: list.id,
+      title: list.title,
+      cardIds: Array.isArray(list.cardIds)
+        ? list.cardIds
+        : (list.cards || []).map((card) => card.id).filter(Boolean),
+    })),
+  };
+}
+
 export function withDefaultLists(data) {
   const existing = Array.isArray(data?.lists) ? data.lists : [];
+  const anyNested = existing.some((list) => Array.isArray(list.cards));
   const byId = new Map(
     existing.map((list) => [
       list.id,
-      { ...list, cards: [...(list.cards || [])] },
+      {
+        ...list,
+        cards: Array.isArray(list.cards) ? [...list.cards] : list.cards,
+        cardIds: Array.isArray(list.cardIds) ? [...list.cardIds] : list.cardIds,
+      },
     ])
   );
 
@@ -29,7 +96,12 @@ export function withDefaultLists(data) {
       byId.delete(def.id);
       return found;
     }
-    return { ...def, cards: [] };
+    return {
+      id: def.id,
+      title: def.title,
+      cardIds: [],
+      ...(anyNested ? { cards: [] } : {}),
+    };
   });
 
   return lists.concat([...byId.values()]);

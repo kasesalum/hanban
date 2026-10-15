@@ -7,11 +7,23 @@ import { db } from "../firebase.js";
 import {
   HEX_COLOR,
   hasCardPatchFields,
+  listsHaveNestedCards,
+  listsPayload,
   normalizeCardLabelIds,
   parseCardLabelIds,
   withDefaultLabels,
-  withDefaultLists,
 } from "../boardLists.js";
+import {
+  applyCardToLists,
+  deleteCardDoc,
+  findCard,
+  loadAssembledLists,
+  moveCardInLists,
+  removeCardFromLists,
+  replaceCardInLists,
+  saveBoardLists,
+  writeCardDoc,
+} from "../cardStore.js";
 import { notifyUsers } from "../mailer.js";
 import { NOTIFICATION_TYPES } from "../notifications.js";
 import { memberProfilesForUids } from "../users.js";
@@ -60,23 +72,6 @@ async function updateAlgoliaMembers(boardId, members) {
   }
 }
 
-function cloneLists(data) {
-  return withDefaultLists(data).map((list) => ({
-    ...list,
-    cards: [...(list.cards || [])],
-  }));
-}
-
-function findCard(lists, cardId) {
-  for (const list of lists) {
-    const index = list.cards.findIndex((item) => item.id === cardId);
-    if (index !== -1) {
-      return { list, index, card: list.cards[index] };
-    }
-  }
-  return null;
-}
-
 // POST /api/board/:id/cards
 router.post("/:id/cards", async (req, res) => {
   try {
@@ -107,7 +102,7 @@ router.post("/:id/cards", async (req, res) => {
     const boardData = boardSnap.data();
     const members = boardData.members || [];
     const labels = withDefaultLabels(boardData);
-    const lists = cloneLists(boardData);
+    let lists = await loadAssembledLists(boardId, boardData);
 
     const list = lists.find((item) => item.id === listId);
     if (!list) {
@@ -138,8 +133,9 @@ router.post("/:id/cards", async (req, res) => {
       createdBy: actor,
     };
 
-    list.cards.push(card);
-    await boardRef.set({ lists }, { merge: true });
+    lists = applyCardToLists(lists, card, listId);
+    await writeCardDoc(boardId, card, listId);
+    await saveBoardLists(boardRef, lists, boardData);
     await addActivity(boardId, card.id, {
       userId: actor,
       type: "create",
@@ -204,7 +200,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const boardData = boardSnap.data();
     const members = boardData.members || [];
     const labels = withDefaultLabels(boardData);
-    const lists = cloneLists(boardData);
+    let lists = await loadAssembledLists(boardId, boardData);
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -356,15 +352,16 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       card.labels = normalizeCardLabelIds(card);
     }
     delete card.label;
-    found.list.cards[found.index] = card;
+    lists = replaceCardInLists(lists, card);
 
+    const nextListId = hasList ? listId : previousListId;
     if (hasList && listId !== found.list.id) {
-      const [moved] = found.list.cards.splice(found.index, 1);
-      lists.find((item) => item.id === listId).cards.push(moved);
-      card = moved;
+      lists = moveCardInLists(lists, cardId, found.list.id, listId);
+      card = { ...card, listId };
     }
 
-    await boardRef.set({ lists }, { merge: true });
+    await writeCardDoc(boardId, card, nextListId);
+    await saveBoardLists(boardRef, lists, boardData);
     await Promise.all(
       pendingActivity.map((entry) => addActivity(boardId, cardId, entry))
     );
@@ -425,7 +422,7 @@ router.get("/:id/cards/:cardId/feed", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = cloneLists(boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data());
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -433,8 +430,9 @@ router.get("/:id/cards/:cardId/feed", async (req, res) => {
 
     const stripped = await migrateNestedCard(boardId, found.card);
     if (stripped) {
-      found.list.cards[found.index] = stripCardFeed(found.card);
-      await boardRef.set({ lists }, { merge: true });
+      const nextLists = replaceCardInLists(lists, stripCardFeed(found.card));
+      await writeCardDoc(boardId, found.card, found.list.id);
+      await saveBoardLists(boardRef, nextLists, boardSnap.data());
     }
 
     const feed = await listFeed(boardId, cardId);
@@ -464,7 +462,7 @@ router.post("/:id/cards/:cardId/images", async (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const lists = cloneLists(boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data());
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -505,7 +503,7 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = cloneLists(boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data());
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -515,8 +513,9 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
       Array.isArray(found.card.comments) || Array.isArray(found.card.activity);
     await migrateNestedCard(boardId, found.card);
     if (needsStrip) {
-      found.list.cards[found.index] = stripCardFeed(found.card);
-      await boardRef.set({ lists }, { merge: true });
+      const nextLists = replaceCardInLists(lists, stripCardFeed(found.card));
+      await writeCardDoc(boardId, found.card, found.list.id);
+      await saveBoardLists(boardRef, nextLists, boardSnap.data());
     }
 
     const result = await addComment(boardId, cardId, {
@@ -562,16 +561,17 @@ router.delete("/:id/cards/:cardId", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = cloneLists(boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data());
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
     }
 
-    found.list.cards.splice(found.index, 1);
-    await boardRef.set({ lists }, { merge: true });
+    const nextLists = removeCardFromLists(lists, cardId);
+    await deleteCardDoc(boardId, cardId);
+    await saveBoardLists(boardRef, nextLists, boardSnap.data());
     await deleteCardFeed(boardId, cardId);
-    res.json({ lists: stripListsFeed(lists) });
+    res.json({ lists: stripListsFeed(nextLists) });
   } catch (error) {
     console.error("Error deleting card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -608,19 +608,34 @@ router.put("/:id/labels", async (req, res) => {
     }
 
     const allowed = new Set(labels.map((label) => label.id));
-    const lists = cloneLists(boardSnap.data()).map((list) => ({
-      ...list,
-      cards: list.cards.map((card) => {
-        const nextIds = normalizeCardLabelIds(card).filter((id) =>
-          allowed.has(id)
-        );
-        const next = { ...card, labels: nextIds };
-        delete next.label;
-        return next;
-      }),
-    }));
+    const lists = (await loadAssembledLists(boardId, boardSnap.data())).map(
+      (list) => ({
+        ...list,
+        cards: (list.cards || []).map((card) => {
+          const nextIds = normalizeCardLabelIds(card).filter((id) =>
+            allowed.has(id)
+          );
+          const next = { ...card, labels: nextIds };
+          delete next.label;
+          return next;
+        }),
+      })
+    );
 
-    await boardRef.set({ labels, lists }, { merge: true });
+    await Promise.all(
+      lists.flatMap((list) =>
+        (list.cards || []).map((card) => writeCardDoc(boardId, card, list.id))
+      )
+    );
+    await boardRef.set(
+      {
+        labels,
+        lists: listsPayload(lists, {
+          nested: listsHaveNestedCards(boardSnap.data()),
+        }),
+      },
+      { merge: true }
+    );
     res.json({ labels, lists: stripListsFeed(lists) });
   } catch (error) {
     if (error.message === "invalid-label") {
@@ -726,17 +741,22 @@ router.delete("/:id/members", async (req, res) => {
       return res.status(400).json({ error: "Cannot remove the board owner" });
     }
 
-    const lists = cloneLists(data).map((list) => ({
+    const lists = (await loadAssembledLists(boardId, data)).map((list) => ({
       ...list,
-      cards: list.cards.map((card) => ({
+      cards: (list.cards || []).map((card) => ({
         ...card,
         assignees: (card.assignees || []).filter((id) => id !== memberUid),
       })),
     }));
 
+    await Promise.all(
+      lists.flatMap((list) =>
+        (list.cards || []).map((card) => writeCardDoc(boardId, card, list.id))
+      )
+    );
     await boardRef.update({
       members: admin.firestore.FieldValue.arrayRemove(memberUid),
-      lists,
+      lists: listsPayload(lists, { nested: listsHaveNestedCards(data) }),
     });
 
     const nextSnap = await boardRef.get();
@@ -744,7 +764,7 @@ router.delete("/:id/members", async (req, res) => {
     await updateAlgoliaMembers(boardId, members);
     const memberProfiles = await memberProfilesForUids(members);
 
-    res.json({ members, lists, memberProfiles });
+    res.json({ members, lists: stripListsFeed(lists), memberProfiles });
   } catch (error) {
     console.error("Error removing member:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -798,13 +818,15 @@ router.get("/:id", async (req, res) => {
     }
 
     const data = boardSnap.data();
-    const lists = withDefaultLists(data);
+    const lists = await loadAssembledLists(boardId, data);
     const labels = withDefaultLabels(data);
     const updates = {};
 
     const existingListIds = (data.lists || []).map((list) => list.id).join(",");
     const nextListIds = lists.map((list) => list.id).join(",");
-    if (existingListIds !== nextListIds) updates.lists = lists;
+    if (existingListIds !== nextListIds) {
+      updates.lists = listsPayload(lists, { nested: listsHaveNestedCards(data) });
+    }
 
     if (!Array.isArray(data.labels) || data.labels.length === 0) {
       updates.labels = labels;

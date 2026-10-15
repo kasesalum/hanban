@@ -16,7 +16,11 @@
   "scripts": {
     "test": "jest && node --test src/*.test.js",
     "dev": "nodemon .",
-    "algolia:backfill": "node src/scripts/backfillAlgolia.js"
+    "algolia:backfill": "node src/scripts/backfillAlgolia.js",
+    "backup:firestore": "node src/scripts/backupFirestore.js",
+    "restore:firestore": "node src/scripts/restoreFirestore.js",
+    "migrate:cards": "node src/scripts/migrateCardsToSubcollection.js",
+    "migrate:cards:strip": "node src/scripts/stripNestedCards.js"
   },
   "keywords": [],
   "author": "",

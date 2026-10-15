@@ -2,7 +2,7 @@ import "dotenv/config";
 import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
 import { db } from "./firebase.js";
-import { DEFAULT_LABELS, DEFAULT_LISTS } from "./boardLists.js";
+import { DEFAULT_LABELS, algoliaBoardRecord, emptyBoardLists } from "./boardLists.js";
 
 export const FEATURE_BOARD_ID = "feature-requests";
 
@@ -44,17 +44,17 @@ async function indexFeatureBoard(members, createdAt) {
     await client.saveObjects({
       indexName: boardIndexName,
       objects: [
-        {
-          objectID: FEATURE_BOARD_ID,
+        algoliaBoardRecord(FEATURE_BOARD_ID, {
           ...FEATURE_BOARD_DATA,
           members,
+          lists: emptyBoardLists(),
           createdAt:
             createdAt instanceof Date
               ? createdAt.toISOString()
               : createdAt?.toDate
                 ? createdAt.toDate().toISOString()
                 : createdAt,
-        },
+        }),
       ],
     });
   } catch (err) {
@@ -93,7 +93,7 @@ export async function ensureFeatureBoardMember(userId) {
         ...FEATURE_BOARD_DATA,
         createdAt,
         members,
-        lists: DEFAULT_LISTS.map((list) => ({ ...list, cards: [] })),
+        lists: emptyBoardLists(),
         labels: DEFAULT_LABELS.map((label) => ({ ...label })),
       });
       return;

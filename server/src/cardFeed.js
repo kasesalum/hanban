@@ -27,7 +27,8 @@ export function stripCardFeed(card) {
 
 export function stripListsFeed(lists) {
   return (lists || []).map((list) => ({
-    ...list,
+    id: list.id,
+    title: list.title,
     cards: (list.cards || []).map(stripCardFeed),
   }));
 }

@@ -1,6 +1,11 @@
 import { db } from "./firebase.js";
 import { notifyUsers } from "./mailer.js";
 import { NOTIFICATION_TYPES } from "./notifications.js";
+import {
+  loadAssembledLists,
+  saveBoardLists,
+  writeCardDoc,
+} from "./cardStore.js";
 
 const INTERVAL_MS = 15 * 60 * 1000;
 
@@ -35,16 +40,13 @@ export async function scanDeadlineNotifications() {
 
   for (const doc of snap.docs) {
     const data = doc.data();
-    const lists = (data.lists || []).map((list) => ({
-      ...list,
-      cards: (list.cards || []).map((card) => ({ ...card })),
-    }));
+    const lists = await loadAssembledLists(doc.id, data);
     let changed = false;
 
     for (const list of lists) {
       if (list.id === "done") continue;
 
-      for (const card of list.cards) {
+      for (const card of list.cards || []) {
         const kind = deadlineKind(card.deadline);
         if (!kind) continue;
         if (!(card.assignees || []).length) continue;
@@ -66,12 +68,13 @@ export async function scanDeadlineNotifications() {
         });
 
         card[flag] = true;
+        await writeCardDoc(doc.id, card, list.id);
         changed = true;
       }
     }
 
     if (changed) {
-      await doc.ref.set({ lists }, { merge: true });
+      await saveBoardLists(doc.ref, lists, data);
     }
   }
 }
