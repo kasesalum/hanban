@@ -15,19 +15,25 @@ function OverlayMenu({
   icon,
   active,
   children,
+  onOpenChange,
 }: {
   label: string;
   icon: ReactNode;
   active?: boolean;
   children: ReactNode;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const setMenuOpen = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpen(false);
+        setMenuOpen(false);
       }
     }
     if (open) document.addEventListener("mousedown", handleClickOutside);
@@ -39,7 +45,7 @@ function OverlayMenu({
       <button
         type="button"
         title={label}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => setMenuOpen(!open)}
         className={`${buttonClass} ${active ? "ring-1 ring-blue-400" : ""}`}
       >
         {icon}
@@ -123,17 +129,90 @@ export function BoardSettingsMenu({
   onEditMembers,
   onEditInfo,
   archiveHref,
+  blockedVisible,
+  blockedCardCount,
+  onToggleBlocked,
 }: {
   onEditLabels: () => void;
   onEditMembers: () => void;
   onEditInfo?: () => void;
   archiveHref?: string;
+  blockedVisible?: boolean;
+  blockedCardCount?: number;
+  onToggleBlocked?: (visible: boolean) => Promise<string | null>;
 }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [blockedError, setBlockedError] = useState("");
+  const [blockedSaving, setBlockedSaving] = useState(false);
   const itemClass =
     "text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover";
+  const needsConfirm = Boolean(blockedVisible && (blockedCardCount || 0) > 0);
+
   return (
-    <OverlayMenu label="Settings" icon={<Settings className="w-4 h-4" />}>
+    <OverlayMenu
+      label="Settings"
+      icon={<Settings className="w-4 h-4" />}
+      onOpenChange={(next) => {
+        if (!next) {
+          setConfirmRemove(false);
+          setBlockedError("");
+        }
+      }}
+    >
       <div className="flex flex-col gap-1">
+        {onToggleBlocked && (
+          <div className="mb-1 border-b border-white/10 pb-2">
+            <label className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-md text-sm text-gray-200 cursor-pointer hover:bg-border-hover">
+              <span>Show blocked column</span>
+              <input
+                type="checkbox"
+                checked={Boolean(blockedVisible)}
+                disabled={blockedSaving}
+                onChange={() => {
+                  if (blockedVisible && needsConfirm && !confirmRemove) {
+                    setConfirmRemove(true);
+                    setBlockedError("");
+                    return;
+                  }
+                  void (async () => {
+                    setBlockedSaving(true);
+                    const message = await onToggleBlocked(!blockedVisible);
+                    setBlockedSaving(false);
+                    setConfirmRemove(false);
+                    setBlockedError(message || "");
+                  })();
+                }}
+                className="size-4 accent-blue-500 disabled:opacity-50"
+              />
+            </label>
+            {confirmRemove && (
+              <>
+                <p className="px-2 text-xs text-gray-400">
+                  Cards in Blocked will move to To Do.
+                </p>
+                <button
+                  type="button"
+                  disabled={blockedSaving}
+                  onClick={() => {
+                    void (async () => {
+                      setBlockedSaving(true);
+                      const message = await onToggleBlocked(false);
+                      setBlockedSaving(false);
+                      setConfirmRemove(false);
+                      setBlockedError(message || "");
+                    })();
+                  }}
+                  className={`${itemClass} w-full disabled:opacity-50`}
+                >
+                  Move cards to To Do and remove
+                </button>
+              </>
+            )}
+            {blockedError && (
+              <p className="px-2 text-xs text-red-400">{blockedError}</p>
+            )}
+          </div>
+        )}
         {onEditInfo && (
           <button type="button" onClick={onEditInfo} className={itemClass}>
             Board info

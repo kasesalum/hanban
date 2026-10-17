@@ -76,8 +76,18 @@ export function algoliaBoardRecord(id, data) {
   };
 }
 
+function blockedIds(list) {
+  const fromIds = Array.isArray(list?.cardIds)
+    ? list.cardIds.filter(Boolean)
+    : [];
+  const fromCards = (list?.cards || []).map((card) => card.id).filter(Boolean);
+  return [...new Set([...fromIds, ...fromCards])];
+}
+
 export function withDefaultLists(data) {
   const existing = Array.isArray(data?.lists) ? data.lists : [];
+  const keepBlocked =
+    existing.length === 0 || existing.some((list) => list.id === "blocked");
   const anyNested = existing.some((list) => Array.isArray(list.cards));
   const byId = new Map(
     existing.map((list) => [
@@ -90,7 +100,9 @@ export function withDefaultLists(data) {
     ])
   );
 
-  const lists = DEFAULT_LISTS.map((def) => {
+  const lists = DEFAULT_LISTS.filter(
+    (def) => keepBlocked || def.id !== "blocked"
+  ).map((def) => {
     const found = byId.get(def.id);
     if (found) {
       byId.delete(def.id);
@@ -105,6 +117,67 @@ export function withDefaultLists(data) {
   });
 
   return lists.concat([...byId.values()]);
+}
+
+export function withoutBlockedList(lists) {
+  const source = lists || [];
+  const blocked = source.find((list) => list.id === "blocked");
+  if (!blocked) return source;
+
+  const rest = source.filter((list) => list.id !== "blocked");
+  const targetId = rest.some((list) => list.id === "todo")
+    ? "todo"
+    : rest[0]?.id;
+  if (!targetId) return rest;
+
+  const ids = blockedIds(blocked);
+  const cards = Array.isArray(blocked.cards) ? blocked.cards : [];
+
+  return rest.map((list) => {
+    if (list.id !== targetId) return list;
+    const cardIds = [...(list.cardIds || [])];
+    for (const id of ids) {
+      if (!cardIds.includes(id)) cardIds.push(id);
+    }
+    const next = { ...list, cardIds };
+    if (Array.isArray(list.cards) || cards.length > 0) {
+      const nextCards = [...(list.cards || [])];
+      for (const card of cards) {
+        if (!nextCards.some((item) => item.id === card.id)) nextCards.push(card);
+      }
+      next.cards = nextCards;
+    }
+    return next;
+  });
+}
+
+export function withBlockedList(lists) {
+  const source = lists || [];
+  if (source.some((list) => list.id === "blocked")) return source;
+
+  const anyCards = source.some((list) => Array.isArray(list.cards));
+  const blocked = {
+    id: "blocked",
+    title: "Blocked",
+    cardIds: [],
+    ...(anyCards ? { cards: [] } : {}),
+  };
+
+  const next = [];
+  let inserted = false;
+  for (const list of source) {
+    next.push(list);
+    if (list.id === "todo") {
+      next.push(blocked);
+      inserted = true;
+    }
+  }
+  if (!inserted) {
+    const index = next.findIndex((list) => list.id === "in-progress");
+    if (index === -1) next.unshift(blocked);
+    else next.splice(index, 0, blocked);
+  }
+  return next;
 }
 
 export function withDefaultLabels(data) {

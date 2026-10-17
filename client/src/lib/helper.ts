@@ -320,6 +320,30 @@ export async function updateBoardLabels(
   }
 }
 
+export async function setBlockedColumnVisible(
+  boardId: string,
+  visible: boolean
+): Promise<{ lists: any[] } | { error: string } | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/board/${boardId}/columns/blocked`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visible }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || "Failed to update the Blocked column" };
+    }
+    return data;
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to update the Blocked column" };
+  }
+}
+
 export async function updateBoardInfo(
   boardId: string,
   info: string

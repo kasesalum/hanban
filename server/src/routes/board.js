@@ -11,7 +11,9 @@ import {
   listsPayload,
   normalizeCardLabelIds,
   parseCardLabelIds,
+  withBlockedList,
   withDefaultLabels,
+  withoutBlockedList,
 } from "../boardLists.js";
 import { applyDoneTransition } from "../cardArchive.js";
 import { prepareCardDocs } from "../cardArchives.js";
@@ -801,6 +803,57 @@ router.delete("/:id/members", async (req, res) => {
 });
 
 const MAX_BOARD_INFO = 2000;
+
+// PATCH /api/board/:id/columns/blocked
+router.patch("/:id/columns/blocked", async (req, res) => {
+  try {
+    const boardId = req.params.id;
+    if (typeof req.body?.visible !== "boolean") {
+      return res.status(400).json({ error: "Missing visible" });
+    }
+
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const data = boardSnap.data();
+    const lists = await loadAssembledLists(boardId, data, {
+      includeHidden: true,
+      persist: false,
+    });
+    const hasBlocked = lists.some((list) => list.id === "blocked");
+    const visible = req.body.visible;
+
+    if (visible === hasBlocked) {
+      return res.json({ lists: listsForBoardClient(lists) });
+    }
+
+    const next = visible ? withBlockedList(lists) : withoutBlockedList(lists);
+
+    if (!visible) {
+      const blocked = lists.find((list) => list.id === "blocked");
+      await Promise.all(
+        (blocked?.cards || []).map((card) => writeCardDoc(boardId, card, "todo"))
+      );
+    }
+
+    await boardRef.set(
+      {
+        lists: listsPayload(next, {
+          nested: listsHaveNestedCards(data),
+        }),
+      },
+      { merge: true }
+    );
+
+    res.json({ lists: listsForBoardClient(next) });
+  } catch (error) {
+    console.error("Error updating blocked column:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // PATCH /api/board/:id
 router.patch("/:id", async (req, res) => {

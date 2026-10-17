@@ -34,6 +34,7 @@ import {
   getBoardInfo,
   moveBoardCard,
   removeBoardMember,
+  setBlockedColumnVisible,
   updateBoardCard,
   updateBoardInfo,
   updateBoardLabels,
@@ -146,6 +147,8 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [membersOpen, setMembersOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<Record<string, SortKey>>({});
+  const [confirmRemoveBlocked, setConfirmRemoveBlocked] = useState(false);
+  const [blockedSaving, setBlockedSaving] = useState(false);
   const openCardRef = useRef(openCard);
   openCardRef.current = openCard;
 
@@ -179,6 +182,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   const lists = board?.lists?.length ? board.lists : EMPTY_COLUMNS;
+  const blockedList = board?.lists?.find((list) => list.id === "blocked");
   const boardLabels = board?.labels?.length ? board.labels : DEFAULT_BOARD_LABELS;
   const members = board?.members || [];
   const memberProfiles = board?.memberProfiles || [];
@@ -317,6 +321,26 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     if (cardId) handleMove(cardId, listId);
   };
 
+  const handleSetBlocked = async (visible: boolean) => {
+    if (blockedSaving) return null;
+    setBlockedSaving(true);
+    try {
+      const result = await setBlockedColumnVisible(boardId, visible);
+      if (!result) return "Failed to update the Blocked column";
+      if ("error" in result) return result.error;
+      setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+      if (!visible) {
+        setConfirmRemoveBlocked(false);
+        setOpenCard((prev) =>
+          prev?.listId === "blocked" ? { ...prev, listId: "todo" } : prev
+        );
+      }
+      return null;
+    } finally {
+      setBlockedSaving(false);
+    }
+  };
+
   return (
     <BoardWorkspace
       onSignOut={handleSignOut}
@@ -353,6 +377,9 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
               />
               <BoardSettingsMenu
                 archiveHref={archiveHref}
+                blockedVisible={Boolean(blockedList)}
+                blockedCardCount={blockedList?.cards?.length || 0}
+                onToggleBlocked={board ? handleSetBlocked : undefined}
                 onEditLabels={() => setLabelsOpen(true)}
                 onEditMembers={() => setMembersOpen(true)}
                 onEditInfo={
@@ -423,6 +450,25 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                       </select>
                     </label>
                   </div>
+                  {column.id === "blocked" && (
+                    <button
+                      type="button"
+                      disabled={blockedSaving}
+                      onClick={() => {
+                        const count = (column.cards || []).length;
+                        if (count > 0 && !confirmRemoveBlocked) {
+                          setConfirmRemoveBlocked(true);
+                          return;
+                        }
+                        void handleSetBlocked(false);
+                      }}
+                      className="mx-3 mb-2 px-2 py-1 rounded-md border border-white/15 text-left text-xs text-gray-200 hover:bg-border-hover disabled:opacity-50"
+                    >
+                      {confirmRemoveBlocked
+                        ? "Move cards to To Do and remove"
+                        : "Remove Blocked column"}
+                    </button>
+                  )}
                   <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
                     {visibleCards.length === 0 && (
                       <p className="px-1 text-sm text-gray-400">
