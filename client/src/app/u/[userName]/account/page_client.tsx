@@ -80,6 +80,12 @@ export default function AccountPage({ userName }: DashboardPageProps) {
       if (editingField === "photo" && photoFile) {
         try {
           const uploaded = await uploadAvatar(user.uid, photoFile);
+          if (!uploaded?.url) {
+            setStatusMessage(
+              "Error uploading photo. Use a JPG, PNG, GIF, or WebP under 5MB."
+            );
+            return;
+          }
           nextPhoto = uploaded.url;
         } catch (error: any) {
           setStatusMessage(

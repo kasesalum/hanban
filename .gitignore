@@ -38,7 +38,7 @@ yarn-error.log*
 /server/serviceAccountKey.json
 /server/uploads/
 /backups/
-
+.cursor/
 # vercel
 .vercel
 
