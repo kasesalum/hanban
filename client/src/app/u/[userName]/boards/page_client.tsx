@@ -184,27 +184,6 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
       <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-10">
           <section>
             <h2 className="flex text-xl items-center font-semibold mb-3">
-              <Star className="inline-block w-5 h-5 mr-3" />
-              Starred Boards
-            </h2>
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {pinnedBoards.length === 0 ? (
-                <p className="text-gray-400">No starred boards.</p>
-              ) : (
-                pinnedBoards.map((board) => (
-                  <BoardCard
-                    key={board.id}
-                    board={board}
-                    togglePin={togglePinBoard}
-                    openBoard={() => user && openBoard(board.id, user, router)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="flex text-xl items-center font-semibold mb-3">
               <Component className="inline-block w-5 h-5 mr-3" />
               My Boards
             </h2>

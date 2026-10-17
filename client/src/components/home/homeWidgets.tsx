@@ -41,27 +41,6 @@ export default function HomeWidgets({
           </li>
         </ul>
       </section>
-
-      <section>
-        <h3 className="flex items-center text-lg font-semibold mb-3">
-          <Star className="inline-block w-4 h-4 mr-2" />
-          Starred Boards
-        </h3>
-        <div className="flex flex-col gap-4 pb-2">
-          {starred.length === 0 ? (
-            <p className="text-gray-400">No starred boards.</p>
-          ) : (
-            starred.map((board) => (
-              <BoardCardSmall
-                key={board.id}
-                board={board}
-                togglePin={togglePinBoard}
-                openBoard={() => user && openBoard(board.id, user, router)}
-              />
-            ))
-          )}
-        </div>
-      </section>
     </div>
   );
 }
