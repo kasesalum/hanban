@@ -3,6 +3,9 @@
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
 import DescriptionText from "@/components/boards/descriptionText";
 import { Star } from "lucide-react";
+import { useEffect, useRef } from "react";
+
+let compactLabelLogs = 0;
 
 export type BoardLabel = {
   id: string;
@@ -135,6 +138,41 @@ export default function BoardCard({
     : board.label
       ? [board.label]
       : [];
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!compact) return;
+    if (compactLabelLogs >= 6) return;
+    compactLabelLogs += 1;
+    const el = rootRef.current;
+    if (!el) return;
+    const row = el.querySelector("[data-label-row]");
+    const matched = labelIds.map((id) => findBoardLabel(labels, id)?.id || null);
+    // #region agent log
+    fetch("http://127.0.0.1:7714/ingest/873a84c2-e2a8-46f7-9e1f-649f2d7a14b5", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b8f6fc" },
+      body: JSON.stringify({
+        sessionId: "b8f6fc",
+        hypothesisId: "C",
+        location: "boardCard.tsx:compact",
+        message: "compact card label layout",
+        data: {
+          nodeEnv: process.env.NODE_ENV,
+          labelCount: labelIds.length,
+          matchedCount: matched.filter(Boolean).length,
+          unmatched: labelIds.length - matched.filter(Boolean).length,
+          className: el.className,
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+          clipped: el.scrollHeight > el.clientHeight + 1,
+          labelRowChildren: row?.childElementCount ?? 0,
+          labelRowHeight: row ? (row as HTMLElement).offsetHeight : 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [compact, labelIds, labels]);
   const hasMeta =
     labelIds.length > 0 ||
     Boolean(board.deadline) ||
@@ -143,6 +181,7 @@ export default function BoardCard({
 
   return (
     <div
+      ref={rootRef}
       onClick={() => {
         if (onOpen) onOpen();
         else openBoard?.(board.id);
@@ -245,7 +284,7 @@ export default function BoardCard({
                   : <DescriptionText text={board.description} />}
               </p>
             )}
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1" data-label-row="">
               {labelIds.map((id) => (
                 <LabelChip key={id} labelId={id} labels={labels} />
               ))}

@@ -4,7 +4,8 @@ import {
   listsPayload,
   normalizeCardLabelIds,
 } from "./boardLists.js";
-import { stripCardFeed } from "./cardFeed.js";
+import { isVisibleOnBoard } from "./cardArchive.js";
+import { stripCardFeed, stripListsFeed } from "./cardFeed.js";
 
 async function getDb() {
   const { db } = await import("./firebase.js");
@@ -33,6 +34,9 @@ export function toStoredCard(card, listId) {
   }
   if (card.notifiedApproaching) stored.notifiedApproaching = true;
   if (card.notifiedOverdue) stored.notifiedOverdue = true;
+  if (card.completedAt) stored.completedAt = card.completedAt;
+  if (card.archived) stored.archived = true;
+  if (card.archivedAt) stored.archivedAt = card.archivedAt;
   return stored;
 }
 
@@ -51,7 +55,8 @@ export function nestedCardForList(card, listId) {
   return rest;
 }
 
-export function assembleLists(boardData, cardDocs) {
+export function assembleLists(boardData, cardDocs, options = {}) {
+  const includeHidden = options.includeHidden === true;
   const byId = new Map(
     (cardDocs || []).map((card) => [card.id, stripCardFeed({ ...card })])
   );
@@ -74,6 +79,7 @@ export function assembleLists(boardData, cardDocs) {
         );
       })
       .filter(Boolean)
+      .filter((card) => includeHidden || isVisibleOnBoard(card, list.id))
       .map((card) => stripCardFeed(card));
     const assembled = { ...list, cardIds: ids, cards };
     return assembled;
@@ -83,13 +89,25 @@ export function assembleLists(boardData, cardDocs) {
     if (used.has(card.id)) continue;
     const list = next.find((item) => item.id === card.listId) || next[0];
     if (!list) continue;
-    list.cards = list.cards || [];
     list.cardIds = list.cardIds || [];
-    list.cards.push(stripCardFeed(card));
     if (!list.cardIds.includes(card.id)) list.cardIds.push(card.id);
+    if (!includeHidden && !isVisibleOnBoard(card, list.id)) continue;
+    list.cards = list.cards || [];
+    list.cards.push(stripCardFeed(card));
   }
 
   return next;
+}
+
+export function listsForBoardClient(lists) {
+  return stripListsFeed(
+    (lists || []).map((list) => ({
+      ...list,
+      cards: (list.cards || []).filter((card) =>
+        isVisibleOnBoard(card, list.id)
+      ),
+    }))
+  );
 }
 
 export async function loadCardDocs(boardId) {
@@ -98,9 +116,13 @@ export async function loadCardDocs(boardId) {
   return snap.docs.map((doc) => fromCardDoc(doc.id, doc.data()));
 }
 
-export async function loadAssembledLists(boardId, boardData) {
-  const cardDocs = await loadCardDocs(boardId);
-  return assembleLists(boardData, cardDocs);
+export async function loadAssembledLists(boardId, boardData, options = {}) {
+  const { prepareCardDocs } = await import("./cardArchives.js");
+  const persist = options.persist !== false;
+  const cardDocs = persist
+    ? await prepareCardDocs(boardId, { persist: true })
+    : await loadCardDocs(boardId);
+  return assembleLists(boardData, cardDocs, options);
 }
 
 export function findCard(lists, cardId) {

@@ -2,6 +2,7 @@
 
 import { assigneeLabel, type BoardLabel, type MemberProfile } from "@/components/boards/boardCard";
 import { Filter, Settings } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const buttonClass =
@@ -121,37 +122,34 @@ export function BoardSettingsMenu({
   onEditLabels,
   onEditMembers,
   onEditInfo,
+  archiveHref,
 }: {
   onEditLabels: () => void;
   onEditMembers: () => void;
   onEditInfo?: () => void;
+  archiveHref?: string;
 }) {
+  const itemClass =
+    "text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover";
   return (
     <OverlayMenu label="Settings" icon={<Settings className="w-4 h-4" />}>
       <div className="flex flex-col gap-1">
         {onEditInfo && (
-          <button
-            type="button"
-            onClick={onEditInfo}
-            className="text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover"
-          >
+          <button type="button" onClick={onEditInfo} className={itemClass}>
             Board info
           </button>
         )}
-        <button
-          type="button"
-          onClick={onEditLabels}
-          className="text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover"
-        >
+        <button type="button" onClick={onEditLabels} className={itemClass}>
           Edit labels
         </button>
-        <button
-          type="button"
-          onClick={onEditMembers}
-          className="text-left text-sm px-2 py-1.5 rounded-md text-gray-200 hover:bg-border-hover"
-        >
+        <button type="button" onClick={onEditMembers} className={itemClass}>
           Members
         </button>
+        {archiveHref ? (
+          <Link href={archiveHref} className={itemClass}>
+            Archive
+          </Link>
+        ) : null}
       </div>
     </OverlayMenu>
   );

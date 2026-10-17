@@ -1,6 +1,6 @@
 "use client";
 
-import BoardCard, {
+import {
   DEFAULT_BOARD_LABELS,
   cardLabelIds,
   type BoardLabel,
@@ -18,9 +18,11 @@ import {
   BoardFilterMenu,
   BoardSettingsMenu,
 } from "@/components/boards/boardHeaderMenus";
-import AppShell from "@/components/navigation/appShell";
+import BoardWorkspace from "@/components/boards/boardWorkspace";
+import TicketCard, {
+  type TicketCardData,
+} from "@/components/boards/ticketCard";
 import HeaderActions from "@/components/navigation/headerActions";
-import PageHeader from "@/components/navigation/pageHeader";
 import { auth } from "@/lib/firebase";
 import {
   addBoardMember,
@@ -36,6 +38,13 @@ import {
   updateBoardInfo,
   updateBoardLabels,
 } from "@/lib/helper";
+import {
+  SORT_OPTIONS,
+  type SortKey,
+  defaultSortForList,
+  isDoneVisible,
+  sortCards,
+} from "@/lib/cardSort";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { ArrowUpDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -46,15 +55,7 @@ interface BoardPageProps {
   boardName: string;
 }
 
-type TaskCard = {
-  id: string;
-  title: string;
-  description?: string;
-  assignees?: string[];
-  labels?: string[];
-  label?: string;
-  deadline?: string;
-  createdAt?: string;
+type TaskCard = TicketCardData & {
   comments?: DetailCard["comments"];
   activity?: DetailCard["activity"];
 };
@@ -128,54 +129,6 @@ function applyMove(
   );
 }
 
-type SortKey =
-  | "deadline-asc"
-  | "deadline-desc"
-  | "title-asc"
-  | "title-desc"
-  | "created-desc"
-  | "created-asc";
-
-const DEFAULT_SORT: SortKey = "deadline-asc";
-
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "deadline-asc", label: "Due date (soonest)" },
-  { value: "deadline-desc", label: "Due date (latest)" },
-  { value: "title-asc", label: "Title (A-Z)" },
-  { value: "title-desc", label: "Title (Z-A)" },
-  { value: "created-desc", label: "Created (newest)" },
-  { value: "created-asc", label: "Created (oldest)" },
-];
-
-function sortCards(cards: TaskCard[], key: SortKey): TaskCard[] {
-  const copy = [...cards];
-  copy.sort((a, b) => {
-    if (key === "deadline-asc" || key === "deadline-desc") {
-      const aD = a.deadline || "";
-      const bD = b.deadline || "";
-      if (!aD && !bD) return (a.title || "").localeCompare(b.title || "");
-      if (!aD) return 1;
-      if (!bD) return -1;
-      const cmp = aD.localeCompare(bD);
-      return key === "deadline-asc" ? cmp : -cmp;
-    }
-    if (key === "title-asc" || key === "title-desc") {
-      const cmp = (a.title || "").localeCompare(b.title || "", undefined, {
-        sensitivity: "base",
-      });
-      return key === "title-asc" ? cmp : -cmp;
-    }
-    const aC = a.createdAt || "";
-    const bC = b.createdAt || "";
-    if (!aC && !bC) return (a.title || "").localeCompare(b.title || "");
-    if (!aC) return 1;
-    if (!bC) return -1;
-    const cmp = aC.localeCompare(bC);
-    return key === "created-asc" ? cmp : -cmp;
-  });
-  return copy;
-}
-
 export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -236,6 +189,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const boardInfoText = isFeatureBoard
     ? board?.info?.trim() || FEATURE_BOARD_INFO
     : board?.info || "";
+  const archiveHref = `/b/${boardId}/${boardName}/archive`;
 
   const matchesFilters = (card: TaskCard) => {
     if (assigneeFilter === "me" && user?.uid && !card.assignees?.includes(user.uid)) {
@@ -364,188 +318,159 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   return (
-    <AppShell
+    <BoardWorkspace
       onSignOut={handleSignOut}
       userName={userName}
       user={user}
-      mainClassName="relative flex-1 min-w-0 flex flex-col overflow-hidden"
-    >
-      {board?.background?.type === "color" ? (
-          <div
-            className="absolute inset-0"
-            style={{ background: board.background.value }}
-          />
-        ) : board?.background?.value ? (
-          <img
-            src={board.background.value}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-background" />
-        )}
-        <div className="absolute inset-0 bg-black/25" />
-
-        <PageHeader
-          variant="overlay"
-          title={title}
-          leading={
+      title={title}
+      background={board?.background}
+      leading={
+        <>
+          {boardInfoText.trim() ? (
+            <BoardInfoTip info={boardInfoText} />
+          ) : null}
+          {board?.privacy ? (
+            <span className="shrink-0 text-xs uppercase tracking-wide px-2 py-1 rounded-md bg-black/40 text-gray-200">
+              {board.privacy}
+            </span>
+          ) : null}
+        </>
+      }
+      actions={
+        <HeaderActions
+          overlay
+          primary={
             <>
-              {boardInfoText.trim() ? (
-                <BoardInfoTip info={boardInfoText} />
-              ) : null}
-              {board?.privacy ? (
-                <span className="shrink-0 text-xs uppercase tracking-wide px-2 py-1 rounded-md bg-black/40 text-gray-200">
-                  {board.privacy}
-                </span>
-              ) : null}
+              <BoardFilterMenu
+                assigneeFilter={assigneeFilter}
+                labelFilter={labelFilter}
+                labels={boardLabels}
+                members={members}
+                currentUserId={user?.uid}
+                memberProfiles={memberProfiles}
+                onAssigneeChange={setAssigneeFilter}
+                onLabelChange={setLabelFilter}
+              />
+              <BoardSettingsMenu
+                archiveHref={archiveHref}
+                onEditLabels={() => setLabelsOpen(true)}
+                onEditMembers={() => setMembersOpen(true)}
+                onEditInfo={
+                  isFeatureBoard ? undefined : () => setInfoOpen(true)
+                }
+              />
             </>
           }
-          actions={
-            <HeaderActions
-              overlay
-              primary={
-                <>
-                  <BoardFilterMenu
-                    assigneeFilter={assigneeFilter}
-                    labelFilter={labelFilter}
-                    labels={boardLabels}
-                    members={members}
-                    currentUserId={user?.uid}
-                    memberProfiles={memberProfiles}
-                    onAssigneeChange={setAssigneeFilter}
-                    onLabelChange={setLabelFilter}
-                  />
-                  <BoardSettingsMenu
-                    onEditLabels={() => setLabelsOpen(true)}
-                    onEditMembers={() => setMembersOpen(true)}
-                    onEditInfo={
-                      isFeatureBoard ? undefined : () => setInfoOpen(true)
-                    }
-                  />
-                </>
-              }
-            />
-          }
         />
+      }
+    >
+      <div className="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
+        {loading ? (
+          <p className="text-white/80">Loading board…</p>
+        ) : !board ? (
+          <p className="text-white/80">Board not found.</p>
+        ) : (
+          <div className="flex gap-4 h-full items-start">
+            {lists.map((column) => {
+              const sortKey = columnSort[column.id] || defaultSortForList(column.id);
+              const visibleCards = sortCards(
+                (column.cards || []).filter((card) => {
+                  if (column.id === "done" && !isDoneVisible(card)) return false;
+                  return matchesFilters(card);
+                }),
+                sortKey
+              );
+              return (
+                <section
+                  key={column.id}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOverList(column.id);
+                  }}
+                  onDragLeave={() =>
+                    setDragOverList((prev) => (prev === column.id ? null : prev))
+                  }
+                  onDrop={(event) => handleDrop(event, column.id)}
+                  className={`w-80 shrink-0 rounded-xl bg-background/90 border shadow-md flex flex-col max-h-full ${
+                    dragOverList === column.id
+                      ? "border-indigo-400"
+                      : "border-border"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 px-3 py-3">
+                    <h2 className="font-semibold text-gray-100 truncate min-w-0">
+                      {column.title}
+                    </h2>
+                    <label className="relative shrink-0 flex items-center text-gray-400">
+                      <ArrowUpDown className="w-3.5 h-3.5 pointer-events-none absolute left-1.5" />
+                      <select
+                        value={sortKey}
+                        aria-label={`Sort ${column.title}`}
+                        title="Sort list"
+                        onChange={(event) =>
+                          setColumnSort((prev) => ({
+                            ...prev,
+                            [column.id]: event.target.value as SortKey,
+                          }))
+                        }
+                        className="appearance-none pl-6 pr-1.5 py-1 w-[10.5rem] text-[11px] rounded-md bg-background-alt border border-border text-gray-300"
+                      >
+                        {SORT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
+                    {visibleCards.length === 0 && (
+                      <p className="px-1 text-sm text-gray-400">
+                        No cards yet
+                      </p>
+                    )}
+                    {visibleCards.map((card) => (
+                      <TicketCard
+                        key={card.id}
+                        card={card}
+                        listId={column.id}
+                        labels={boardLabels}
+                        currentUserId={user?.uid}
+                        memberProfiles={memberProfiles}
+                        draggable
+                        onDragStart={(event) => handleDragStart(event, card.id)}
+                        onMove={(nextListId) => handleMove(card.id, nextListId)}
+                        onOpen={() =>
+                          setOpenCard({ card, listId: column.id })
+                        }
+                      />
+                    ))}
+                  </div>
 
-        <div className="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
-          {loading ? (
-            <p className="text-white/80">Loading board…</p>
-          ) : !board ? (
-            <p className="text-white/80">Board not found.</p>
-          ) : (
-            <div className="flex gap-4 h-full items-start">
-              {lists.map((column) => {
-                const sortKey = columnSort[column.id] || DEFAULT_SORT;
-                const visibleCards = sortCards(
-                  (column.cards || []).filter(matchesFilters),
-                  sortKey
-                );
-                return (
-                  <section
-                    key={column.id}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      setDragOverList(column.id);
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenCard((prev) =>
+                        prev?.isNew
+                          ? { ...prev, listId: column.id }
+                          : {
+                              card: newDraftCard(),
+                              listId: column.id,
+                              isNew: true,
+                            }
+                      );
                     }}
-                    onDragLeave={() =>
-                      setDragOverList((prev) => (prev === column.id ? null : prev))
-                    }
-                    onDrop={(event) => handleDrop(event, column.id)}
-                    className={`w-80 shrink-0 rounded-xl bg-background/90 border shadow-md flex flex-col max-h-full ${
-                      dragOverList === column.id
-                        ? "border-indigo-400"
-                        : "border-border"
-                    }`}
+                    className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
                   >
-                    <div className="flex items-center justify-between gap-2 px-3 py-3">
-                      <h2 className="font-semibold text-gray-100 truncate min-w-0">
-                        {column.title}
-                      </h2>
-                      <label className="relative shrink-0 flex items-center text-gray-400">
-                        <ArrowUpDown className="w-3.5 h-3.5 pointer-events-none absolute left-1.5" />
-                        <select
-                          value={sortKey}
-                          aria-label={`Sort ${column.title}`}
-                          title="Sort list"
-                          onChange={(event) =>
-                            setColumnSort((prev) => ({
-                              ...prev,
-                              [column.id]: event.target.value as SortKey,
-                            }))
-                          }
-                          className="appearance-none pl-6 pr-1.5 py-1 w-[10.5rem] text-[11px] rounded-md bg-background-alt border border-border text-gray-300"
-                        >
-                          {SORT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
-                      {visibleCards.length === 0 && (
-                        <p className="px-1 text-sm text-gray-400">
-                          No cards yet
-                        </p>
-                      )}
-                      {visibleCards.map((card) => (
-                        <div
-                          key={card.id}
-                          draggable
-                          onDragStart={(event) => handleDragStart(event, card.id)}
-                        >
-                          <BoardCard
-                            compact
-                            currentUserId={user?.uid}
-                            memberProfiles={memberProfiles}
-                            listId={column.id}
-                            onMove={(nextListId) =>
-                              handleMove(card.id, nextListId)
-                            }
-                            onOpen={() =>
-                              setOpenCard({ card, listId: column.id })
-                            }
-                            labels={boardLabels}
-                            board={{
-                              id: card.id,
-                              name: card.title,
-                              description: card.description,
-                              assignees: card.assignees,
-                              labelIds: cardLabelIds(card),
-                              deadline: card.deadline,
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenCard((prev) =>
-                          prev?.isNew
-                            ? { ...prev, listId: column.id }
-                            : {
-                                card: newDraftCard(),
-                                listId: column.id,
-                                isNew: true,
-                              }
-                        );
-                      }}
-                      className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add a card
-                    </button>
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                    <Plus className="w-4 h-4" />
+                    Add a card
+                  </button>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <CardDetailModal
         open={Boolean(openCard)}
@@ -638,6 +563,6 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           return null;
         }}
       />
-    </AppShell>
+    </BoardWorkspace>
   );
 }

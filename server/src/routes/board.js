@@ -13,10 +13,13 @@ import {
   parseCardLabelIds,
   withDefaultLabels,
 } from "../boardLists.js";
+import { applyDoneTransition } from "../cardArchive.js";
+import { prepareCardDocs } from "../cardArchives.js";
 import {
   applyCardToLists,
   deleteCardDoc,
   findCard,
+  listsForBoardClient,
   loadAssembledLists,
   moveCardInLists,
   removeCardFromLists,
@@ -40,7 +43,6 @@ import {
   migrateNestedCard,
   normalizeAttachments,
   stripCardFeed,
-  stripListsFeed,
 } from "../cardFeed.js";
 import {
   decodeImagePayload,
@@ -131,6 +133,7 @@ router.post("/:id/cards", async (req, res) => {
       deadline: deadline ? String(deadline) : "",
       createdAt: new Date().toISOString(),
       createdBy: actor,
+      ...(listId === "done" ? { completedAt: new Date().toISOString() } : {}),
     };
 
     lists = applyCardToLists(lists, card, listId);
@@ -156,7 +159,7 @@ router.post("/:id/cards", async (req, res) => {
       });
     }
 
-    res.json({ card, lists: stripListsFeed(lists) });
+    res.json({ card, lists: listsForBoardClient(lists) });
   } catch (error) {
     console.error("Error creating card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -200,7 +203,10 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const boardData = boardSnap.data();
     const members = boardData.members || [];
     const labels = withDefaultLabels(boardData);
-    let lists = await loadAssembledLists(boardId, boardData);
+    let lists = await loadAssembledLists(boardId, boardData, {
+      includeHidden: true,
+      persist: false,
+    });
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -357,7 +363,8 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const nextListId = hasList ? listId : previousListId;
     if (hasList && listId !== found.list.id) {
       lists = moveCardInLists(lists, cardId, found.list.id, listId);
-      card = { ...card, listId };
+      card = applyDoneTransition({ ...card, listId }, previousListId, listId);
+      lists = replaceCardInLists(lists, card);
     }
 
     await writeCardDoc(boardId, card, nextListId);
@@ -405,7 +412,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       });
     }
 
-    res.json({ card: stripCardFeed(card), lists: stripListsFeed(lists) });
+    res.json({ card: stripCardFeed(card), lists: listsForBoardClient(lists) });
   } catch (error) {
     console.error("Error updating card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -422,7 +429,10 @@ router.get("/:id/cards/:cardId/feed", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = await loadAssembledLists(boardId, boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data(), {
+      includeHidden: true,
+      persist: false,
+    });
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -462,7 +472,10 @@ router.post("/:id/cards/:cardId/images", async (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const lists = await loadAssembledLists(boardId, boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data(), {
+      includeHidden: true,
+      persist: false,
+    });
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -503,7 +516,10 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = await loadAssembledLists(boardId, boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data(), {
+      includeHidden: true,
+      persist: false,
+    });
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -543,7 +559,7 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     res.json({
       comment: result.comment,
       activity: result.activity,
-      lists: stripListsFeed(lists),
+      lists: listsForBoardClient(lists),
     });
   } catch (error) {
     console.error("Error adding comment:", error);
@@ -561,7 +577,10 @@ router.delete("/:id/cards/:cardId", async (req, res) => {
       return res.status(404).json({ error: "Board not found" });
     }
 
-    const lists = await loadAssembledLists(boardId, boardSnap.data());
+    const lists = await loadAssembledLists(boardId, boardSnap.data(), {
+      includeHidden: true,
+      persist: false,
+    });
     const found = findCard(lists, cardId);
     if (!found) {
       return res.status(404).json({ error: "Card not found" });
@@ -571,7 +590,7 @@ router.delete("/:id/cards/:cardId", async (req, res) => {
     await deleteCardDoc(boardId, cardId);
     await saveBoardLists(boardRef, nextLists, boardSnap.data());
     await deleteCardFeed(boardId, cardId);
-    res.json({ lists: stripListsFeed(nextLists) });
+    res.json({ lists: listsForBoardClient(nextLists) });
   } catch (error) {
     console.error("Error deleting card:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -608,7 +627,12 @@ router.put("/:id/labels", async (req, res) => {
     }
 
     const allowed = new Set(labels.map((label) => label.id));
-    const lists = (await loadAssembledLists(boardId, boardSnap.data())).map(
+    const lists = (
+      await loadAssembledLists(boardId, boardSnap.data(), {
+        includeHidden: true,
+        persist: false,
+      })
+    ).map(
       (list) => ({
         ...list,
         cards: (list.cards || []).map((card) => {
@@ -636,7 +660,7 @@ router.put("/:id/labels", async (req, res) => {
       },
       { merge: true }
     );
-    res.json({ labels, lists: stripListsFeed(lists) });
+    res.json({ labels, lists: listsForBoardClient(lists) });
   } catch (error) {
     if (error.message === "invalid-label") {
       return res.status(400).json({ error: "Invalid label name or color" });
@@ -741,7 +765,12 @@ router.delete("/:id/members", async (req, res) => {
       return res.status(400).json({ error: "Cannot remove the board owner" });
     }
 
-    const lists = (await loadAssembledLists(boardId, data)).map((list) => ({
+    const lists = (
+      await loadAssembledLists(boardId, data, {
+        includeHidden: true,
+        persist: false,
+      })
+    ).map((list) => ({
       ...list,
       cards: (list.cards || []).map((card) => ({
         ...card,
@@ -764,7 +793,7 @@ router.delete("/:id/members", async (req, res) => {
     await updateAlgoliaMembers(boardId, members);
     const memberProfiles = await memberProfilesForUids(members);
 
-    res.json({ members, lists: stripListsFeed(lists), memberProfiles });
+    res.json({ members, lists: listsForBoardClient(lists), memberProfiles });
   } catch (error) {
     console.error("Error removing member:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -798,6 +827,33 @@ router.patch("/:id", async (req, res) => {
     res.json({ info });
   } catch (error) {
     console.error("Error updating board info:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/board/:id/archive
+router.get("/:id/archive", async (req, res) => {
+  try {
+    const boardId = req.params.id;
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const data = boardSnap.data();
+    const cards = (await prepareCardDocs(boardId, { persist: true }))
+      .filter((card) => card.archived)
+      .sort((a, b) =>
+        String(b.completedAt || b.archivedAt || "").localeCompare(
+          String(a.completedAt || a.archivedAt || "")
+        )
+      )
+      .map((card) => stripCardFeed(card));
+
+    res.json({ cards, labels: withDefaultLabels(data) });
+  } catch (error) {
+    console.error("Error fetching board archive:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -841,7 +897,7 @@ router.get("/:id", async (req, res) => {
     res.json({
       id: boardSnap.id,
       ...data,
-      lists: stripListsFeed(lists),
+      lists: listsForBoardClient(lists),
       labels,
       memberProfiles,
     });

@@ -110,6 +110,19 @@ export async function getBoardInfo(
   }
 }
 
+export async function getBoardArchive(
+  boardId: string
+): Promise<{ cards: any[]; labels: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/archive`);
+    if (!res.ok) throw new Error("Failed to fetch board archive");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 /** * A helper function that creates a new board for a user.
  * It adds a new document to the "Boards" collection with the specified board name and user ID.
  * Returns the ID of the newly created board or null if an error occurs.

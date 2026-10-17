@@ -7,6 +7,7 @@ import notificationRoutes from "./routes/notification.js";
 import boardRoutes from "./routes/board.js";
 import searchRoutes from "./routes/search.js";
 import { startDeadlineNotifications } from "./deadlineNotifications.js";
+import { startCardArchives } from "./cardArchives.js";
 import { isMailConfigured } from "./mailer.js";
 import { localUploadRoot } from "./localUpload.js";
 
@@ -38,4 +39,5 @@ const port = process.env.PORT || 5050;
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
   startDeadlineNotifications();
+  startCardArchives();
 });
