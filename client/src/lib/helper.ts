@@ -637,7 +637,7 @@ export async function openBoard(
   router: ReturnType<typeof useRouter>,
   urlName?: string
 ): Promise<void> {
-  await addRecentBoard(user.uid, id);
+  // await addRecentBoard(user.uid, id);
   const boardName = encodeURIComponent(urlName || "board");
   router.push(`/b/${id}/${boardName}`);
 }
