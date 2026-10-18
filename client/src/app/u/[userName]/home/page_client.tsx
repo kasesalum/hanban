@@ -4,7 +4,8 @@ import HomeWidgets from "@/components/home/homeWidgets";
 import AppShell from "@/components/navigation/appShell";
 import PageHeader from "@/components/navigation/pageHeader";
 import { auth } from "@/lib/firebase";
-import { getBoardInfo, getUserBoards, openBoard, pinBoard } from "@/lib/helper";
+import { openBoard, pinBoard } from "@/lib/helper";
+import { useBoardCache, useUserBoards } from "@/lib/useBoards";
 import { onAuthStateChanged, signOut, User } from "@firebase/auth";
 import { House, Inbox } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -17,9 +18,16 @@ interface HomePageProps {
 export default function HomePage({ userName }: HomePageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [boardList, setBoardList] = useState<
-    { id: string; name?: string; pinned?: boolean }[]
-  >([]);
+  const { boards, pinned } = useUserBoards(user?.uid);
+  const { setPinned } = useBoardCache();
+  const pinnedSet = new Set(pinned);
+  const boardList = boards
+    .map((board) => ({
+      ...board,
+      id: board.id || board.objectID || "",
+      pinned: pinnedSet.has(board.id || board.objectID || ""),
+    }))
+    .filter((board) => board.pinned);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -34,25 +42,6 @@ export default function HomePage({ userName }: HomePageProps) {
     return () => unsubscribe();
   }, [router]);
 
-  useEffect(() => {
-    const fetchBoards = async () => {
-      if (!user) return;
-      const { boards, pinned } = await getUserBoards(user.uid);
-
-      const pinnedSet = new Set(pinned);
-
-      const boardData = await Promise.all(
-        boards.map((board) => getBoardInfo(board.objectID, user.uid))
-      );
-
-      const boardsWithPins = boardData
-        .filter(Boolean)
-        .map((b) => ({ ...b, pinned: pinnedSet.has(b.id) }));
-      setBoardList(boardsWithPins.filter((b) => b.pinned));
-    };
-    fetchBoards();
-  }, [user]);
-
   const handleSignOut = async () => {
     await signOut(auth);
     router.push("/login");
@@ -60,11 +49,11 @@ export default function HomePage({ userName }: HomePageProps) {
 
   const togglePinBoard = async (id: string) => {
     if (!user?.uid) return;
-    const previous = boardList;
-    setBoardList((prev) => prev.filter((b) => b.id !== id));
+    const isPinned = pinned.includes(id);
+    setPinned(user.uid, id, !isPinned);
     const newStatus = await pinBoard(user.uid, id);
-    if (newStatus !== false) {
-      setBoardList(previous);
+    if (newStatus !== !isPinned) {
+      setPinned(user.uid, id, isPinned);
     }
   };
 

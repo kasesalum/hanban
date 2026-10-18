@@ -17,11 +17,11 @@ import {
   addCardComment,
   deleteBoardCard,
   getBoardArchive,
-  getBoardInfo,
   moveBoardCard,
   updateBoardCard,
 } from "@/lib/helper";
 import { groupCardsByCompletedMonth } from "@/lib/cardSort";
+import { useBoardCache, useBoardInfo } from "@/lib/useBoards";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,15 +68,48 @@ export default function ArchivePage({
 }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [board, setBoard] = useState<BoardInfo | null>(null);
+  const { board: cachedBoard, loading: boardLoading } = useBoardInfo(
+    boardId,
+    user?.uid
+  );
+  const { patchBoard } = useBoardCache();
+  const [override, setOverride] = useState<{
+    boardId: string;
+    board: BoardInfo | null;
+  } | null>(null);
+  const board =
+    override?.boardId === boardId
+      ? override.board
+      : ((cachedBoard as BoardInfo | null) ?? null);
   const [cards, setCards] = useState<ArchiveCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [archiveLoading, setArchiveLoading] = useState(true);
+  const loading = !user || boardLoading || archiveLoading;
+
+  const setBoard = (
+    updater: BoardInfo | null | ((prev: BoardInfo | null) => BoardInfo | null)
+  ) => {
+    setOverride((prev) => {
+      const current =
+        prev?.boardId === boardId
+          ? prev.board
+          : ((cachedBoard as BoardInfo | null) ?? null);
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return { boardId, board: next };
+    });
+  };
+
+  const commitBoard = (patch: Partial<BoardInfo>) => {
+    setBoard((prev) => (prev ? { ...prev, ...patch } : prev));
+    patchBoard(boardId, patch);
+  };
   const [openCard, setOpenCard] = useState<{
     card: DetailCard;
     listId: string;
   } | null>(null);
   const openCardRef = useRef(openCard);
   openCardRef.current = openCard;
+  const cachedBoardRef = useRef(cachedBoard);
+  cachedBoardRef.current = cachedBoard;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -90,24 +123,30 @@ export default function ArchivePage({
   }, [router]);
 
   useEffect(() => {
-    const load = async () => {
-      if (!user) return;
-      setLoading(true);
-      const [info, archive] = await Promise.all([
-        getBoardInfo(boardId, user.uid),
-        getBoardArchive(boardId),
-      ]);
-      setBoard(info);
+    if (!user) return;
+    let cancelled = false;
+    setArchiveLoading(true);
+    getBoardArchive(boardId).then((archive) => {
+      if (cancelled) return;
       setCards(archive?.cards || []);
       if (archive?.labels?.length) {
-        setBoard((prev) =>
-          prev ? { ...prev, labels: archive.labels } : prev
-        );
+        const labels = archive.labels;
+        setOverride((prev) => {
+          const current =
+            prev?.boardId === boardId
+              ? prev.board
+              : ((cachedBoardRef.current as BoardInfo | null) ?? null);
+          if (!current) return prev;
+          return { boardId, board: { ...current, labels } };
+        });
+        patchBoard(boardId, { labels });
       }
-      setLoading(false);
+      setArchiveLoading(false);
+    });
+    return () => {
+      cancelled = true;
     };
-    load();
-  }, [user, boardId]);
+  }, [user, boardId, patchBoard]);
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -124,7 +163,7 @@ export default function ArchivePage({
   const months = groupCardsByCompletedMonth(cards);
 
   const applyCardResult = (result: { card: any; lists: any[] }) => {
-    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    commitBoard({ lists: result.lists });
     setCards((prev) =>
       result.card?.archived
         ? prev.map((card) =>
@@ -183,7 +222,7 @@ export default function ArchivePage({
     if (!openCard) return;
     const result = await deleteBoardCard(boardId, openCard.card.id);
     if (!result) return;
-    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    commitBoard({ lists: result.lists });
     setCards((prev) => prev.filter((card) => card.id !== openCard.card.id));
     setOpenCard(null);
   };

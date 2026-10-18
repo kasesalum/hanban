@@ -31,7 +31,6 @@ import {
   deleteBoardCard,
   FEATURE_BOARD_ID,
   FEATURE_BOARD_INFO,
-  getBoardInfo,
   moveBoardCard,
   removeBoardMember,
   setBlockedColumnVisible,
@@ -46,6 +45,7 @@ import {
   isDoneVisible,
   sortCards,
 } from "@/lib/cardSort";
+import { useBoardCache, useBoardInfo } from "@/lib/useBoards";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { ArrowUpDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -133,8 +133,38 @@ function applyMove(
 export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [board, setBoard] = useState<BoardInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { board: cachedBoard, loading: boardLoading } = useBoardInfo(
+    boardId,
+    user?.uid
+  );
+  const { patchBoard } = useBoardCache();
+  const [override, setOverride] = useState<{
+    boardId: string;
+    board: BoardInfo | null;
+  } | null>(null);
+  const board =
+    override?.boardId === boardId
+      ? override.board
+      : ((cachedBoard as BoardInfo | null) ?? null);
+  const loading = !user || boardLoading;
+
+  const setBoard = (
+    updater: BoardInfo | null | ((prev: BoardInfo | null) => BoardInfo | null)
+  ) => {
+    setOverride((prev) => {
+      const current =
+        prev?.boardId === boardId
+          ? prev.board
+          : ((cachedBoard as BoardInfo | null) ?? null);
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return { boardId, board: next };
+    });
+  };
+
+  const commitBoard = (patch: Partial<BoardInfo>) => {
+    setBoard((prev) => (prev ? { ...prev, ...patch } : prev));
+    patchBoard(boardId, patch);
+  };
   const [openCard, setOpenCard] = useState<{
     card: DetailCard;
     listId: string;
@@ -163,18 +193,6 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
 
     return () => unsubscribe();
   }, [router]);
-
-  useEffect(() => {
-    const fetchBoard = async () => {
-      if (!user) return;
-      setLoading(true);
-      const info = await getBoardInfo(boardId, user.uid);
-      setBoard(info);
-      setLoading(false);
-    };
-
-    fetchBoard();
-  }, [user, boardId]);
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -232,7 +250,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   };
 
   const applyCardResult = (result: { card: any; lists: any[] }) => {
-    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    commitBoard({ lists: result.lists });
     const nextListId = result.lists.find((list: BoardList) =>
       (list.cards || []).some((item) => item.id === result.card.id)
     )?.id;
@@ -278,7 +296,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     if (!openCard || openCard.isNew) return;
     const result = await deleteBoardCard(boardId, openCard.card.id);
     if (!result) return;
-    setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+    commitBoard({ lists: result.lists });
     setOpenCard(null);
   };
 
@@ -305,6 +323,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     setBoard((prev) =>
       prev ? { ...prev, lists: result.lists } : { id: boardId, lists: result.lists }
     );
+    patchBoard(boardId, { lists: result.lists });
     setOpenCard(nextOpen);
     return true;
   };
@@ -328,7 +347,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
       const result = await setBlockedColumnVisible(boardId, visible);
       if (!result) return "Failed to update the Blocked column";
       if ("error" in result) return result.error;
-      setBoard((prev) => (prev ? { ...prev, lists: result.lists } : prev));
+      commitBoard({ lists: result.lists });
       if (!visible) {
         setConfirmRemoveBlocked(false);
         setOpenCard((prev) =>
@@ -550,7 +569,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           const result = await updateBoardInfo(boardId, next);
           if (!result) return "Failed to update board info";
           if ("error" in result) return result.error;
-          setBoard((prev) => (prev ? { ...prev, info: result.info } : prev));
+          commitBoard({ info: result.info });
           return null;
         }}
       />
@@ -561,11 +580,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         onSave={async (next) => {
           const result = await updateBoardLabels(boardId, next);
           if (!result) return;
-          setBoard((prev) =>
-            prev
-              ? { ...prev, labels: result.labels, lists: result.lists }
-              : prev
-          );
+          commitBoard({ labels: result.labels, lists: result.lists });
           setLabelsOpen(false);
         }}
       />
@@ -581,31 +596,21 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           const result = await addBoardMember(boardId, email, user?.uid);
           if (!result) return "Failed to add member";
           if ("error" in result) return result.error;
-          setBoard((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  members: result.members,
-                  memberProfiles: result.memberProfiles || prev.memberProfiles,
-                }
-              : prev
-          );
+          commitBoard({
+            members: result.members,
+            memberProfiles: result.memberProfiles || board?.memberProfiles,
+          });
           return null;
         }}
         onRemove={async (uid) => {
           const result = await removeBoardMember(boardId, uid);
           if (!result) return "Failed to remove member";
           if ("error" in result) return result.error;
-          setBoard((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  members: result.members,
-                  memberProfiles: result.memberProfiles || prev.memberProfiles,
-                  lists: result.lists || prev.lists,
-                }
-              : prev
-          );
+          commitBoard({
+            members: result.members,
+            memberProfiles: result.memberProfiles || board?.memberProfiles,
+            lists: result.lists || board?.lists,
+          });
           return null;
         }}
       />

@@ -1,6 +1,7 @@
 "use client";
 
-import { getRecentBoards, getBoardInfo, openBoard, getUserNotifications, FEATURE_BOARD_ID } from "@/lib/helper";
+import { openBoard, getUserNotifications, FEATURE_BOARD_ID } from "@/lib/helper";
+import { useRecentBoards } from "@/lib/useBoards";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -18,7 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
-import { useState, useRef, useEffect, Key } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import NavItem from "./navItemProp";
 import SearchModal from "../search/searchModal";
@@ -43,13 +44,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onSignOut, userName, user, unreadCount: unreadCountProp }: SidebarProps) {
   const router = useRouter();
-  const [recentBoards, setRecentBoards] = useState<
-    {
-      id: Key | null | undefined;
-      label: string;
-      href: string;
-    }[]
-  >([]);
+  const recentBoards = useRecentBoards(user?.uid);
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [fetchedUnread, setFetchedUnread] = useState(0);
@@ -80,36 +75,6 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
       badge: unreadCount > 0,
     },
   ];
-
-  useEffect(() => {
-    async function fetchRecents() {
-      if (!user || !user.uid) return;
-
-      const boardIds = await getRecentBoards(user.uid);
-      const boardsData = await Promise.all(
-        boardIds.map(async (id) => {
-          const info = await getBoardInfo(id, user.uid);
-          return info
-            ? {
-                id,
-                label: info.name || "Untitled",
-                href: `/b/${id}/${info.name || ""}`,
-              }
-            : null;
-        })
-      );
-
-      setRecentBoards(
-        boardsData.filter(Boolean) as {
-          id: string;
-          label: string;
-          href: string;
-        }[]
-      );
-    }
-
-    fetchRecents();
-  }, [user]);
 
   useEffect(() => {
     if (unreadCountProp !== undefined) return;
@@ -298,10 +263,14 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
               icon={<Folder className="w-5 h-5" />}
               collapsed={collapsed}
               onClick={() =>
-                typeof item.id === "string" &&
                 user &&
                 "emailVerified" in user &&
-                openBoard(item.id, user as import("firebase/auth").User, router)
+                openBoard(
+                  item.id,
+                  user as import("firebase/auth").User,
+                  router,
+                  item.urlName
+                )
               }
             />
           ))

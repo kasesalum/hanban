@@ -634,14 +634,11 @@ export async function deleteBoardCard(
 export async function openBoard(
   id: string,
   user: User,
-  router: ReturnType<typeof useRouter>
+  router: ReturnType<typeof useRouter>,
+  urlName?: string
 ): Promise<void> {
-  const board = await getBoardInfo(id, user.uid);
-  if (!board) return;
-
   await addRecentBoard(user.uid, id);
-
-  const boardName = encodeURIComponent(board.urlName || "Untitled");
+  const boardName = encodeURIComponent(urlName || "board");
   router.push(`/b/${id}/${boardName}`);
 }
 

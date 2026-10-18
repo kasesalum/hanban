@@ -27,7 +27,8 @@ export default function SearchModal({
   const [user, loading] = useAuthState(auth);
 
   const handlers: Record<string, (item: any) => void> = {
-    board: (board) => user && openBoard(board.objectID, user, router),
+    board: (board) =>
+      user && openBoard(board.objectID, user, router, board.urlName),
     command: (cmd) => cmd.action(),
   };
 

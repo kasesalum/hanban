@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { useEffect, useState } from "react";
 import { signOut, onAuthStateChanged, User } from "firebase/auth";
-import { getUserBoards, getBoardInfo, pinBoard, openBoard } from "@/lib/helper";
+import { getBoardInfo, pinBoard, openBoard } from "@/lib/helper";
+import { useBoardCache, useUserBoards } from "@/lib/useBoards";
 import {
   LayoutDashboard,
   Plus,
@@ -25,8 +26,14 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [newBoardOpen, setNewBoardOpen] = useState(false);
-  const [boards, setBoards] = useState<any[]>([]);
-  const [pinnedBoards, setPinnedBoards] = useState<any[]>([]);
+  const { boards: memberBoards, pinned, loading } = useUserBoards(user?.uid);
+  const { setPinned, upsertBoard, invalidateUserBoards } = useBoardCache();
+  const pinnedSet = new Set(pinned);
+  const boards = memberBoards.map((board) => ({
+    ...board,
+    id: board.id || board.objectID || "",
+    pinned: pinnedSet.has(board.id || board.objectID || ""),
+  }));
 
   function redirectToUserBoards(
     user: User,
@@ -76,29 +83,6 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
     return () => unsubscribe();
   }, [router]);
 
-  useEffect(() => {
-    const fetchBoards = async () => {
-      if (!user) return;
-
-      const { boards: memberBoards, pinned } = await getUserBoards(user.uid);
-
-      const pinnedSet = new Set(pinned);
-
-      const boardData = await Promise.all(
-        memberBoards.map((board) => getBoardInfo(board.objectID, user.uid))
-      );
-
-      const boardsWithPins = boardData
-        .filter(Boolean)
-        .map((b) => ({ ...b, pinned: pinnedSet.has(b.id) }));
-
-      setBoards(boardsWithPins);
-      setPinnedBoards(boardsWithPins.filter((b) => b.pinned));
-    };
-
-    fetchBoards();
-  }, [user]);
-
   const handleSignOut = async () => {
     await signOut(auth);
     router.push("/login");
@@ -106,35 +90,12 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
 
   const togglePinBoard = async (id: string) => {
     if (!user?.uid) return;
-    const isPinned = pinnedBoards.some((b) => b.id === id);
-
-    if (isPinned) {
-      setPinnedBoards((prev) => prev.filter((b) => b.id !== id));
-    } else {
-      const board = boards.find((b) => b.id === id);
-      if (board)
-        setPinnedBoards((prev) => [...prev, { ...board, pinned: true }]);
-    }
-
-    setBoards((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, pinned: !isPinned } : b))
-    );
-
+    const isPinned = pinned.includes(id);
+    setPinned(user.uid, id, !isPinned);
     const newStatus = await pinBoard(user.uid, id);
-
     if (newStatus !== !isPinned) {
       console.warn("Backend disagreed, rolling back");
-
-      setBoards((prev) =>
-        prev.map((b) => (b.id === id ? { ...b, pinned: isPinned } : b))
-      );
-
-      if (isPinned) {
-        const board = boards.find((b) => b.id === id);
-        if (board) setPinnedBoards((prev) => [...prev, board]);
-      } else {
-        setPinnedBoards((prev) => prev.filter((b) => b.id !== id));
-      }
+      setPinned(user.uid, id, isPinned);
     }
   };
 
@@ -175,9 +136,12 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
           if (!user) return;
 
           const newBoard = await getBoardInfo(newBoardId, user.uid);
-          if (!newBoard) return;
+          if (!newBoard) {
+            invalidateUserBoards(user.uid);
+            return;
+          }
 
-          setBoards((prev) => [...prev, { ...newBoard, pinned: false }]);
+          upsertBoard(user.uid, { ...newBoard, pinned: false });
         }}
       />
 
@@ -188,7 +152,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
               My Boards
             </h2>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,11rem))] gap-4">
-              {boards.length === 0 ? (
+              {loading ? null : boards.length === 0 ? (
                 <p className="text-gray-400">No boards yet.</p>
               ) : (
                 boards.map((board) => (
@@ -196,7 +160,9 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
                     key={board.id}
                     board={board}
                     togglePin={togglePinBoard}
-                    openBoard={() => user && openBoard(board.id, user, router)}
+                    openBoard={() =>
+                      user && openBoard(board.id, user, router, board.urlName)
+                    }
                   />
                 ))
               )}
