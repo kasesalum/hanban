@@ -37,6 +37,15 @@ export function toStoredCard(card, listId) {
   if (card.completedAt) stored.completedAt = card.completedAt;
   if (card.archived) stored.archived = true;
   if (card.archivedAt) stored.archivedAt = card.archivedAt;
+  if (card.originalDeadline) {
+    stored.originalDeadline = String(card.originalDeadline);
+  }
+  if (typeof card.postponeCount === "number" && Number.isFinite(card.postponeCount)) {
+    stored.postponeCount = card.postponeCount;
+  }
+  if (typeof card.postponedDays === "number" && Number.isFinite(card.postponedDays)) {
+    stored.postponedDays = card.postponedDays;
+  }
   return stored;
 }
 

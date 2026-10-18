@@ -70,18 +70,35 @@ async function commitOps(ops) {
   }
 }
 
-export async function addActivity(boardId, cardId, { userId, type, text, commentId }) {
+export async function addActivity(boardId, cardId, fields) {
   const id = randomUUID();
   const entry = {
     cardId,
-    userId: userId || "",
-    type,
-    text: String(text || ""),
+    userId: fields.userId || "",
+    type: fields.type,
+    text: String(fields.text || ""),
     createdAt: new Date().toISOString(),
   };
-  if (commentId) entry.commentId = commentId;
+  if (fields.commentId) entry.commentId = fields.commentId;
+  if (typeof fields.deadline === "string") entry.deadline = fields.deadline;
+  if (Array.isArray(fields.assignees)) {
+    entry.assignees = fields.assignees.map((uid) => String(uid));
+  }
+  if (typeof fields.previous === "string") entry.previous = fields.previous;
+  if (typeof fields.next === "string") entry.next = fields.next;
+  if (Array.isArray(fields.added)) {
+    entry.added = fields.added.map((uid) => String(uid));
+  }
+  if (Array.isArray(fields.removed)) {
+    entry.removed = fields.removed.map((uid) => String(uid));
+  }
   await activityCol(boardId).doc(id).set(entry);
   return { id, ...entry };
+}
+
+export async function listCardActivity(boardId, cardId) {
+  const snap = await activityCol(boardId).where("cardId", "==", cardId).get();
+  return serializeSnap(snap);
 }
 
 export async function addComment(boardId, cardId, { userId, html, attachments }) {

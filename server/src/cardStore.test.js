@@ -13,6 +13,23 @@ describe("toStoredCard", () => {
     assert.equal(stored.label, undefined);
   });
 
+  it("keeps postponement summary fields", () => {
+    const stored = toStoredCard(
+      {
+        id: "c1",
+        title: "Slip",
+        deadline: "2026-10-25",
+        originalDeadline: "2026-10-18",
+        postponeCount: 1,
+        postponedDays: 7,
+      },
+      "todo"
+    );
+    assert.equal(stored.originalDeadline, "2026-10-18");
+    assert.equal(stored.postponeCount, 1);
+    assert.equal(stored.postponedDays, 7);
+  });
+
   it("keeps completedAt and archive flags", () => {
     const stored = toStoredCard(
       {

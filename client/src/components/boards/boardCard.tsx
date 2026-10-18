@@ -1,6 +1,7 @@
 "use client";
 
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
+import { PostponeChip } from "@/components/boards/postponeChip";
 import DescriptionText from "@/components/boards/descriptionText";
 import { Star } from "lucide-react";
 
@@ -71,6 +72,7 @@ export interface BoardCardData {
   label?: string;
   labelIds?: string[];
   deadline?: string;
+  postponedDays?: number;
 }
 
 export type MemberProfile = {
@@ -138,6 +140,7 @@ export default function BoardCard({
   const hasMeta =
     labelIds.length > 0 ||
     Boolean(board.deadline) ||
+    Boolean(board.postponedDays && board.postponedDays > 0) ||
     (board.assignees && board.assignees.length > 0);
   const clickable = Boolean(onOpen || openBoard);
 
@@ -268,6 +271,14 @@ export default function BoardCard({
                     : board.deadline}
                 </span>
               )}
+              <PostponeChip
+                days={board.postponedDays}
+                className={
+                  compact
+                    ? "text-xs font-semibold px-2 py-1"
+                    : "text-[10px] px-1.5 py-0.5"
+                }
+              />
             </div>
             {board.assignees && board.assignees.length > 0 && (
               <div className="flex flex-wrap gap-1">

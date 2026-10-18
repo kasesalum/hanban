@@ -23,6 +23,26 @@ type UserBoardsResponse = {
   pinned: string[];
 };
 
+export type UserTicket = {
+  id: string;
+  title: string;
+  description: string;
+  assignees: string[];
+  labels: string[];
+  deadline: string;
+  postponedDays: number;
+  listId: string;
+  boardId: string;
+  boardName: string;
+  urlName: string;
+  boardLabels: { id: string; name: string; color: string }[];
+};
+
+export type UserTicketsResponse = {
+  todo: UserTicket[];
+  inProgress: UserTicket[];
+};
+
 /**
  * A helper function that checks the validity of an email address.
  * It uses a regular expression to validate the format of the email.
@@ -59,6 +79,25 @@ export async function getUserBoards(
   } catch (err) {
     console.error(err);
     return { boards: [], pinned: [] };
+  }
+}
+
+export async function getUserTickets(
+  userId: string
+): Promise<UserTicketsResponse> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/user/tickets?userId=${encodeURIComponent(userId)}`
+    );
+    if (!res.ok) throw new Error("Failed to fetch tickets");
+    const data = await res.json();
+    return {
+      todo: data.todo || [],
+      inProgress: data.inProgress || [],
+    };
+  } catch (err) {
+    console.error(err);
+    return { todo: [], inProgress: [] };
   }
 }
 
@@ -517,10 +556,16 @@ export async function addCardComment(
   }
 }
 
+export type CardSlip = {
+  originalDeadline: string;
+  postponeCount: number;
+  postponedDays: number;
+};
+
 export async function getCardFeed(
   boardId: string,
   cardId: string
-): Promise<{ comments: any[]; activity: any[] } | null> {
+): Promise<{ comments: any[]; activity: any[]; slip?: CardSlip } | null> {
   try {
     const res = await fetch(
       `${API_BASE}/api/board/${boardId}/cards/${cardId}/feed`

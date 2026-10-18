@@ -15,6 +15,7 @@ export type TicketCardData = {
   labels?: string[];
   label?: string;
   deadline?: string;
+  postponedDays?: number;
   createdAt?: string;
   completedAt?: string;
   archived?: boolean;
@@ -57,6 +58,7 @@ export default function TicketCard({
         assignees: card.assignees,
         labelIds: cardLabelIds(card),
         deadline: card.deadline,
+        postponedDays: card.postponedDays,
       }}
     />
   );

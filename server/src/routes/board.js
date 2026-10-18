@@ -16,6 +16,12 @@ import {
   withoutBlockedList,
 } from "../boardLists.js";
 import { applyDoneTransition } from "../cardArchive.js";
+import {
+  deadlineActivityText,
+  needsSlipBackfill,
+  postponedDayCount,
+  slipSummary,
+} from "../deadlineActivity.js";
 import { prepareCardDocs } from "../cardArchives.js";
 import {
   applyCardToLists,
@@ -41,6 +47,7 @@ import {
   addActivity,
   addComment,
   deleteCardFeed,
+  listCardActivity,
   listFeed,
   migrateNestedCard,
   normalizeAttachments,
@@ -133,6 +140,9 @@ router.post("/:id/cards", async (req, res) => {
       assignees: assigneeIds,
       labels: labelIds,
       deadline: deadline ? String(deadline) : "",
+      originalDeadline: deadline ? String(deadline) : "",
+      postponeCount: 0,
+      postponedDays: 0,
       createdAt: new Date().toISOString(),
       createdBy: actor,
       ...(listId === "done" ? { completedAt: new Date().toISOString() } : {}),
@@ -145,6 +155,8 @@ router.post("/:id/cards", async (req, res) => {
       userId: actor,
       type: "create",
       text: "created this card",
+      deadline: card.deadline,
+      assignees: assigneeIds,
     });
 
     if (assigneeIds.length > 0 && listId !== "done") {
@@ -281,6 +293,8 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
           userId: actor,
           type: "assignees",
           text: bits.join(" and "),
+          added: addedAssignees,
+          removed,
         });
         card.assignees = assigneeIds;
       }
@@ -323,14 +337,35 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
 
     if (hasDeadline) {
       const next = String(deadline);
-      if (next !== (card.deadline || "")) {
+      const prev = card.deadline || "";
+      if (next !== prev) {
         pendingActivity.push({
           userId: actor,
           type: "deadline",
-          text: next
-            ? `changed the due date to ${next}`
-            : "removed the due date",
+          text: deadlineActivityText(prev, next),
+          previous: prev,
+          next,
         });
+        if (!card.originalDeadline) {
+          const history = await listCardActivity(boardId, cardId);
+          const summary = slipSummary({ ...card, deadline: next }, [
+            ...history,
+            {
+              type: "deadline",
+              previous: prev,
+              next,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          card.originalDeadline = summary.originalDeadline;
+          card.postponeCount = summary.postponeCount;
+          card.postponedDays = summary.postponedDays;
+        } else {
+          if (prev && next > prev) {
+            card.postponeCount = Number(card.postponeCount || 0) + 1;
+          }
+          card.postponedDays = postponedDayCount(card.originalDeadline, next);
+        }
         card.deadline = next;
         delete card.notifiedApproaching;
         delete card.notifiedOverdue;
@@ -448,7 +483,22 @@ router.get("/:id/cards/:cardId/feed", async (req, res) => {
     }
 
     const feed = await listFeed(boardId, cardId);
-    res.json(feed);
+    let slip;
+    if (needsSlipBackfill(found.card)) {
+      slip = slipSummary(found.card, feed.activity);
+      await writeCardDoc(
+        boardId,
+        { ...found.card, ...slip },
+        found.list.id
+      );
+    } else {
+      slip = {
+        originalDeadline: found.card.originalDeadline || "",
+        postponeCount: Number(found.card.postponeCount || 0),
+        postponedDays: Number(found.card.postponedDays || 0),
+      };
+    }
+    res.json({ ...feed, slip });
   } catch (error) {
     console.error("Error fetching card feed:", error);
     res.status(500).json({ error: "Internal server error" });

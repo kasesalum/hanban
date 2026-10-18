@@ -19,6 +19,7 @@ import {
   getBoardArchive,
   moveBoardCard,
   updateBoardCard,
+  type CardSlip,
 } from "@/lib/helper";
 import { groupCardsByCompletedMonth } from "@/lib/cardSort";
 import { useBoardCache, useBoardInfo } from "@/lib/useBoards";
@@ -218,6 +219,19 @@ export default function ArchivePage({
     );
   };
 
+  const handleSlip = (slip: CardSlip) => {
+    const cardId = openCardRef.current?.card.id;
+    if (!cardId) return;
+    setCards((prev) =>
+      prev.map((card) => (card.id === cardId ? { ...card, ...slip } : card))
+    );
+    setOpenCard((prev) =>
+      prev && prev.card.id === cardId
+        ? { ...prev, card: { ...prev.card, ...slip } }
+        : prev
+    );
+  };
+
   const handleDeleteCard = async () => {
     if (!openCard) return;
     const result = await deleteBoardCard(boardId, openCard.card.id);
@@ -300,6 +314,7 @@ export default function ArchivePage({
         onUpdate={handleUpdateCard}
         onComment={handleComment}
         onDelete={handleDeleteCard}
+        onSlip={handleSlip}
       />
     </BoardWorkspace>
   );

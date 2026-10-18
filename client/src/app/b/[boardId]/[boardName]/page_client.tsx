@@ -37,6 +37,7 @@ import {
   updateBoardCard,
   updateBoardInfo,
   updateBoardLabels,
+  type CardSlip,
 } from "@/lib/helper";
 import {
   SORT_OPTIONS,
@@ -181,6 +182,8 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [blockedSaving, setBlockedSaving] = useState(false);
   const openCardRef = useRef(openCard);
   openCardRef.current = openCard;
+  const boardRef = useRef(board);
+  boardRef.current = board;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -289,6 +292,26 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
       html,
       user?.uid,
       attachments
+    );
+  };
+
+  const handleSlip = (slip: CardSlip) => {
+    const cardId = openCardRef.current?.card.id;
+    if (!cardId || openCardRef.current?.isNew) return;
+    const current = boardRef.current;
+    if (!current?.lists) return;
+    const lists = current.lists.map((list) => ({
+      ...list,
+      cards: list.cards.map((card) =>
+        card.id === cardId ? { ...card, ...slip } : card
+      ),
+    }));
+    setBoard((prev) => (prev ? { ...prev, lists } : prev));
+    patchBoard(boardId, { lists });
+    setOpenCard((prev) =>
+      prev && prev.card.id === cardId
+        ? { ...prev, card: { ...prev.card, ...slip } }
+        : prev
     );
   };
 
@@ -560,6 +583,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         onCreate={handleCreateCard}
         onComment={handleComment}
         onDelete={handleDeleteCard}
+        onSlip={handleSlip}
       />
       <BoardInfoModal
         open={infoOpen}

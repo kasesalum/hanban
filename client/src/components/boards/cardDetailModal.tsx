@@ -21,7 +21,8 @@ import RichTextEditor, {
   looksLikeHtml,
   type RichAttachment,
 } from "@/components/boards/richTextEditor";
-import { getCardFeed, uploadCardImage } from "@/lib/helper";
+import TicketTimeline from "@/components/boards/ticketTimeline";
+import { getCardFeed, type CardSlip, uploadCardImage } from "@/lib/helper";
 
 export type CardComment = {
   id: string;
@@ -39,6 +40,12 @@ export type CardActivity = {
   text: string;
   commentId?: string;
   createdAt: string;
+  previous?: string;
+  next?: string;
+  deadline?: string;
+  assignees?: string[];
+  added?: string[];
+  removed?: string[];
 };
 
 export type DetailCard = {
@@ -50,6 +57,9 @@ export type DetailCard = {
   labels?: string[];
   label?: string;
   deadline?: string;
+  originalDeadline?: string;
+  postponeCount?: number;
+  postponedDays?: number;
   createdAt?: string;
   comments?: CardComment[];
   activity?: CardActivity[];
@@ -87,6 +97,7 @@ interface CardDetailModalProps {
   }) => Promise<boolean>;
   onComment: (html: string, attachments: RichAttachment[]) => Promise<void>;
   onDelete: () => Promise<void>;
+  onSlip?: (slip: CardSlip) => void;
 }
 
 function formatTime(value: string) {
@@ -188,6 +199,7 @@ export default function CardDetailModal({
   onCreate,
   onComment,
   onDelete,
+  onSlip,
 }: CardDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -211,6 +223,9 @@ export default function CardDetailModal({
   const [mounted, setMounted] = useState(false);
   const [feedComments, setFeedComments] = useState<CardComment[]>([]);
   const [feedActivity, setFeedActivity] = useState<CardActivity[]>([]);
+  const [feedReady, setFeedReady] = useState(false);
+  const onSlipRef = useRef(onSlip);
+  onSlipRef.current = onSlip;
   const membersRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const creatingRef = useRef(false);
@@ -259,13 +274,19 @@ export default function CardDetailModal({
     if (!open || !card?.id || isNew || !boardId) {
       setFeedComments([]);
       setFeedActivity([]);
+      setFeedReady(false);
       return;
     }
     let cancelled = false;
+    setFeedReady(false);
     getCardFeed(boardId, card.id).then((data) => {
-      if (cancelled || !data) return;
-      setFeedComments(data.comments || []);
-      setFeedActivity(data.activity || []);
+      if (cancelled) return;
+      if (data) {
+        setFeedComments(data.comments || []);
+        setFeedActivity(data.activity || []);
+        if (data.slip) onSlipRef.current?.(data.slip);
+      }
+      setFeedReady(true);
     });
     return () => {
       cancelled = true;
@@ -365,6 +386,7 @@ export default function CardDetailModal({
       if (data) {
         setFeedComments(data.comments || []);
         setFeedActivity(data.activity || []);
+        if (data.slip) onSlipRef.current?.(data.slip);
       }
     }
     setBusy(false);
@@ -449,6 +471,7 @@ export default function CardDetailModal({
       if (data) {
         setFeedComments(data.comments || []);
         setFeedActivity(data.activity || []);
+        if (data.slip) onSlipRef.current?.(data.slip);
       }
     }
     setComment("");
@@ -538,7 +561,7 @@ export default function CardDetailModal({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="p-5 space-y-5">
+          <div className="p-5 space-y-5 md:min-h-0 md:overflow-y-auto">
             <div className="flex items-start gap-3">
               <button
                 type="button"
@@ -710,6 +733,19 @@ export default function CardDetailModal({
                 </div>
               )}
             </div>
+
+            {!isNew && feedReady && (
+              <TicketTimeline
+                card={{
+                  createdAt: currentCard.createdAt,
+                  deadline,
+                  originalDeadline: currentCard.originalDeadline,
+                }}
+                activity={feedActivity}
+                currentUserId={currentUserId}
+                memberProfiles={memberProfiles}
+              />
+            )}
 
             <div>
               <p className="mb-1.5 text-sm text-gray-400">Description</p>

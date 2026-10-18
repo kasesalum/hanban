@@ -1,4 +1,4 @@
-import NotificationsPage from "./page_client";
+import { redirect } from "next/navigation";
 
 interface PageProps {
   params: Promise<{ userName: string }>;
@@ -6,14 +6,5 @@ interface PageProps {
 
 export default async function Page({ params }: PageProps) {
   const { userName } = await params;
-
-  return <NotificationsPage userName={userName} />;
-}
-
-export async function generateMetadata({ params }: PageProps) {
-  const { userName } = await params;
-
-  return {
-    title: `Notifications | ${userName}`,
-  };
+  redirect(`/u/${userName}/home`);
 }

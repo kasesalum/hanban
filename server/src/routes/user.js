@@ -5,6 +5,7 @@ import admin from "firebase-admin";
 import { algoliasearch } from "algoliasearch";
 import { DEFAULT_LABELS, algoliaBoardRecord, emptyBoardLists } from "../boardLists.js";
 import { ensureFeatureBoardMember } from "../featureBoard.js";
+import { groupUserTickets } from "../userTickets.js";
 import { invalidateUserCache, searchUsers } from "../users.js";
 import {
   decodeImagePayload,
@@ -75,6 +76,48 @@ router.get("/boards", async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching boards:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/user/tickets?userId=123
+router.get("/tickets", async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    await ensureFeatureBoardMember(userId);
+
+    const boardsSnap = await db
+      .collection("Boards")
+      .where("members", "array-contains", userId)
+      .get();
+
+    const boards = await Promise.all(
+      boardsSnap.docs.map(async (doc) => {
+        const data = doc.data();
+        const cardsSnap = await doc.ref
+          .collection("cards")
+          .where("assignees", "array-contains", userId)
+          .get();
+        return {
+          id: doc.id,
+          name: data.name,
+          urlName: data.urlName,
+          labels: data.labels,
+          cards: cardsSnap.docs.map((cardDoc) => ({
+            id: cardDoc.id,
+            ...cardDoc.data(),
+          })),
+        };
+      })
+    );
+
+    res.json(groupUserTickets(userId, boards));
+  } catch (err) {
+    console.error("Error fetching user tickets:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

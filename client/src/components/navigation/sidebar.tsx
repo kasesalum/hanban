@@ -5,7 +5,6 @@ import { useRecentBoards } from "@/lib/useBoards";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  Bell,
   LogOut,
   User,
   Search,
@@ -67,12 +66,6 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
       label: "Feature Requests",
       href: `/b/${FEATURE_BOARD_ID}/${FEATURE_BOARD_ID}`,
       icon: <Lightbulb className="w-5 h-5" />,
-    },
-    {
-      label: "Notifications",
-      href: `/u/${userName}/notifications`,
-      icon: <Bell className="w-5 h-5" />,
-      badge: unreadCount > 0,
     },
   ];
 
