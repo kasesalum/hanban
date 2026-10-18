@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import Image from "next/image";
+import Loading from "@/components/loading";
 
 export default function Home() {
   const router = useRouter();
@@ -22,7 +23,11 @@ export default function Home() {
   }, [loading, user, router]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen flex bg-background">
+        <Loading layout="page" label="Loading" />
+      </div>
+    );
   }
 
   if (!user) {

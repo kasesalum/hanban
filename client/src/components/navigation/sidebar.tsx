@@ -22,6 +22,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import NavItem from "./navItemProp";
 import SearchModal from "../search/searchModal";
+import Loading from "@/components/loading";
 import { useSidebar } from "./sidebarContext";
 
 export type SidebarUser =
@@ -43,7 +44,9 @@ interface SidebarProps {
 
 export default function Sidebar({ onSignOut, userName, user, unreadCount: unreadCountProp }: SidebarProps) {
   const router = useRouter();
-  const recentBoards = useRecentBoards(user?.uid);
+  const { recent: recentBoards, loading: recentLoading } = useRecentBoards(
+    user?.uid
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [fetchedUnread, setFetchedUnread] = useState(0);
@@ -243,7 +246,13 @@ export default function Sidebar({ onSignOut, userName, user, unreadCount: unread
         {!collapsed && (
           <p className="text-gray-400 font-semibold mb-1">Recent:</p>
         )}
-        {recentBoards.length === 0 ? (
+        {recentLoading ? (
+          <Loading
+            size="sm"
+            label={collapsed ? "" : "Loading"}
+            className={collapsed ? "justify-center" : ""}
+          />
+        ) : recentBoards.length === 0 ? (
           !collapsed && (
             <p className="text-gray-500 text-sm">No recent boards.</p>
           )

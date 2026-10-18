@@ -11,6 +11,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import Loading from "@/components/loading";
 import AppShell from "@/components/navigation/appShell";
 import PageHeader from "@/components/navigation/pageHeader";
 import {
@@ -326,7 +327,7 @@ export default function AccountPage({ userName }: DashboardPageProps) {
               In-app notifications are always on. These settings only control email.
             </p>
             {prefsLoading ? (
-              <p className="text-sm text-gray-400">Loading preferences...</p>
+              <Loading size="sm" label="Loading preferences" />
             ) : !prefs ? (
               <p className="text-sm text-gray-400">
                 Could not load notification preferences.

@@ -17,6 +17,7 @@ import HeaderActions from "@/components/navigation/headerActions";
 import PageHeader from "@/components/navigation/pageHeader";
 import BoardCard from "@/components/boards/boardCard";
 import BoardCreationModal from "@/components/boards/boardCreationModal";
+import Loading from "@/components/loading";
 
 interface DashboardPageProps {
   userName: string;
@@ -151,8 +152,11 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
               <Component className="inline-block w-5 h-5 mr-3" />
               My Boards
             </h2>
+            {loading ? (
+              <Loading layout="page" label="Loading boards" />
+            ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,11rem))] gap-4">
-              {loading ? null : boards.length === 0 ? (
+              {boards.length === 0 ? (
                 <p className="text-gray-400">No boards yet.</p>
               ) : (
                 boards.map((board) => (
@@ -167,6 +171,7 @@ export default function DashboardPage({ userName }: DashboardPageProps) {
                 ))
               )}
             </div>
+            )}
           </section>
         </div>
     </AppShell>

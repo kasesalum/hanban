@@ -1,6 +1,7 @@
 "use client";
 
 import { LabelChip } from "@/components/boards/boardCard";
+import Loading from "@/components/loading";
 import { PostponeChip } from "@/components/boards/postponeChip";
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
 import type { UserTicket } from "@/lib/helper";
@@ -29,7 +30,7 @@ function TicketColumn({
         )}
       </h2>
       {loading ? (
-        <p className="text-sm text-gray-400">Loading tickets…</p>
+        <Loading size="sm" label="Loading tickets" />
       ) : tickets.length === 0 ? (
         <p className="text-sm text-gray-400">{empty}</p>
       ) : (

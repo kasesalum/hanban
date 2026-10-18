@@ -10,7 +10,7 @@ jest.mock("./helper", () => ({
 
 function ListProbe({ userId }: { userId: string }) {
   const { boards, loading } = useUserBoards(userId);
-  const recent = useRecentBoards(userId);
+  const { recent } = useRecentBoards(userId);
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>

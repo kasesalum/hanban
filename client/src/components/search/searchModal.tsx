@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "@/lib/firebase";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { globalSearch, openBoard } from "@/lib/helper";
+import Loading from "@/components/loading";
 
 interface SearchModalProps {
   open: boolean;
@@ -23,6 +24,8 @@ export default function SearchModal({
   commandActions,
 }: SearchModalProps) {
   const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchId = useRef(0);
   const router = useRouter();
   const [user, loading] = useAuthState(auth);
 
@@ -50,16 +53,25 @@ export default function SearchModal({
     const handleInput = async (e: Event) => {
       const target = e.target as HTMLInputElement;
       const query = target.value.trim();
+      const id = ++searchId.current;
 
-      if (query !== "") {
-        try {
-          const searchResults = await globalSearch(query);
-          setResults(searchResults);
-        } catch (err) {
-          console.error("Search error:", err);
-        }
-      } else {
+      if (query === "") {
+        setSearching(false);
         setResults([]);
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const searchResults = await globalSearch(query);
+        if (id !== searchId.current) return;
+        setResults(searchResults);
+      } catch (err) {
+        if (id !== searchId.current) return;
+        console.error("Search error:", err);
+        setResults([]);
+      } finally {
+        if (id === searchId.current) setSearching(false);
       }
     };
 
@@ -92,7 +104,9 @@ export default function SearchModal({
         />
 
         <div className="mt-4 max-h-64 overflow-y-auto">
-          {results.length > 0 ? (
+          {searching ? (
+            <Loading size="sm" label="Searching" />
+          ) : results.length > 0 ? (
             results.map((item) => (
               <div
                 key={item.objectID || item.id}

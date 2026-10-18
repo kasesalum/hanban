@@ -22,6 +22,7 @@ import RichTextEditor, {
   type RichAttachment,
 } from "@/components/boards/richTextEditor";
 import TicketTimeline from "@/components/boards/ticketTimeline";
+import Loading from "@/components/loading";
 import { getCardFeed, type CardSlip, uploadCardImage } from "@/lib/helper";
 
 export type CardComment = {
@@ -734,6 +735,9 @@ export default function CardDetailModal({
               )}
             </div>
 
+            {!isNew && !feedReady && (
+              <Loading size="sm" label="Loading timeline" />
+            )}
             {!isNew && feedReady && (
               <TicketTimeline
                 card={{
@@ -851,7 +855,11 @@ export default function CardDetailModal({
             </form>
 
             <ul className="space-y-3 overflow-y-auto flex-1 min-h-0">
-              {feed.length === 0 ? (
+              {!isNew && !feedReady ? (
+                <li>
+                  <Loading size="sm" label="Loading activity" />
+                </li>
+              ) : feed.length === 0 ? (
                 <li className="text-sm text-gray-500">No activity yet.</li>
               ) : (
                 feed.map((item) => (

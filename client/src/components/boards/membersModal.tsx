@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import Loading from "@/components/loading";
 import { assigneeLabel, type MemberProfile } from "@/components/boards/boardCard";
 import { isValidEmail, searchUsers, type SearchUser } from "@/lib/helper";
 
@@ -173,7 +174,9 @@ export default function MembersModal({
           {showDropdown && (
             <div className="absolute left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background-alt shadow-lg">
               {searching ? (
-                <p className="px-3 py-2 text-sm text-gray-400">Searching…</p>
+                <div className="px-3 py-2">
+                  <Loading size="sm" label="Searching" />
+                </div>
               ) : results.length > 0 ? (
                 <ul>
                   {results.map((user) => (

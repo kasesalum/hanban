@@ -10,6 +10,7 @@ import {
   MessageSquare,
   UserPlus,
 } from "lucide-react";
+import Loading from "@/components/loading";
 
 function notificationCopy(item: AppNotification) {
   if (item.type === "board_member_added") {
@@ -106,7 +107,7 @@ export default function HomeWidgets({
         )}
       </div>
       {loading ? (
-        <p className="text-sm text-gray-400">Loading notifications…</p>
+        <Loading size="sm" label="Loading notifications" />
       ) : notifications.length === 0 ? (
         <p className="text-sm text-gray-400">No notifications yet.</p>
       ) : (

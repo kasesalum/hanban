@@ -49,6 +49,7 @@ import {
 import { useBoardCache, useBoardInfo } from "@/lib/useBoards";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { ArrowUpDown, Plus } from "lucide-react";
+import Loading from "@/components/loading";
 import { useRouter } from "next/navigation";
 import { DragEvent, useEffect, useRef, useState } from "react";
 
@@ -435,7 +436,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     >
       <div className="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
         {loading ? (
-          <p className="text-white/80">Loading board…</p>
+          <Loading layout="page" label="Loading board" className="text-white/80" />
         ) : !board ? (
           <p className="text-white/80">Board not found.</p>
         ) : (

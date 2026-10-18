@@ -369,14 +369,21 @@ export type RecentBoard = {
   href: string;
 };
 
-export function useRecentBoards(userId?: string | null): RecentBoard[] {
-  const { boards, loading } = useUserBoards(userId);
-  const { boardsById, ensureBoardInfo } = useBoardsContext();
-  const [recentIds, setRecentIds] = useState<string[]>([]);
+export function useRecentBoards(userId?: string | null): {
+  recent: RecentBoard[];
+  loading: boolean;
+} {
+  const { boards, loading: boardsLoading } = useUserBoards(userId);
+  const { boardsById, missingIds, ensureBoardInfo } = useBoardsContext();
+  const [recentIds, setRecentIds] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setRecentIds(null);
+      return;
+    }
     let cancelled = false;
+    setRecentIds(null);
     getRecentBoards(userId).then((ids) => {
       if (!cancelled) setRecentIds(ids);
     });
@@ -385,18 +392,23 @@ export function useRecentBoards(userId?: string | null): RecentBoard[] {
     };
   }, [userId]);
 
-  const missingKey = recentIds
-    .filter((id) => !boards.some((board) => boardKey(board) === id) && !boardsById[id])
-    .join(",");
+  const ids = recentIds || [];
+  const unresolved = ids.filter((id) => {
+    if (boards.some((board) => boardKey(board) === id)) return false;
+    if (boardsById[id]) return false;
+    if (missingIds[id]) return false;
+    return true;
+  });
+  const missingKey = unresolved.join(",");
 
   useEffect(() => {
-    if (!userId || loading || !missingKey) return;
+    if (!userId || boardsLoading || !missingKey) return;
     for (const id of missingKey.split(",")) {
       void ensureBoardInfo(id, userId);
     }
-  }, [userId, loading, missingKey, ensureBoardInfo]);
+  }, [userId, boardsLoading, missingKey, ensureBoardInfo]);
 
-  return recentIds.flatMap((id) => {
+  const recent = ids.flatMap((id) => {
     const summary = boards.find((board) => boardKey(board) === id);
     const source = summary || boardsById[id];
     if (!source) return [];
@@ -410,6 +422,13 @@ export function useRecentBoards(userId?: string | null): RecentBoard[] {
       },
     ];
   });
+
+  return {
+    recent,
+    loading:
+      Boolean(userId) &&
+      (recentIds === null || boardsLoading || unresolved.length > 0),
+  };
 }
 
 export function useBoardCache() {

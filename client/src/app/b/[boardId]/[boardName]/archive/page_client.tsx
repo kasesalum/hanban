@@ -27,6 +27,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import Loading from "@/components/loading";
 
 type ArchiveCard = TicketCardData & {
   comments?: DetailCard["comments"];
@@ -269,7 +270,7 @@ export default function ArchivePage({
     >
       <div className="relative z-10 flex-1 overflow-y-auto p-4 sm:p-6">
         {loading ? (
-          <p className="text-white/80">Loading archive…</p>
+          <Loading layout="page" label="Loading archive" className="text-white/80" />
         ) : !board ? (
           <p className="text-white/80">Board not found.</p>
         ) : months.length === 0 ? (
