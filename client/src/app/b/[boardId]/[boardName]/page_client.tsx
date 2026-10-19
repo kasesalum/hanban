@@ -9,7 +9,6 @@ import {
 import CardDetailModal, {
   type DetailCard,
 } from "@/components/boards/cardDetailModal";
-import { tomorrowISO } from "@/components/boards/deadlinePicker";
 import LabelsEditorModal from "@/components/boards/labelsEditorModal";
 import MembersModal from "@/components/boards/membersModal";
 import BoardInfoTip from "@/components/boards/boardInfoTip";
@@ -101,7 +100,7 @@ function newDraftCard(): DetailCard {
     description: "",
     assignees: [],
     labels: [],
-    deadline: tomorrowISO(),
+    deadline: "",
     comments: [],
     activity: [],
   };

@@ -13,7 +13,6 @@ import {
 import DescriptionText from "@/components/boards/descriptionText";
 import DeadlinePicker, {
   isDeadlineOverdue,
-  tomorrowISO,
 } from "@/components/boards/deadlinePicker";
 import RichTextEditor, {
   RichTextHtml,
@@ -254,7 +253,7 @@ export default function CardDetailModal({
       selectedLabelsRef.current = ids;
       setSelectedLabels(ids);
     }
-    setDeadline(card.deadline || (isNew ? tomorrowISO() : ""));
+    setDeadline(card.deadline || "");
     setEditingDescription(false);
     setComment("");
     setCommentAttachments([]);
@@ -348,7 +347,7 @@ export default function CardDetailModal({
     const nextAssignees = fields?.assignees ?? assignees;
     const nextLabelIds = fields?.labels ?? selectedLabels;
     const nextDeadline = fields?.deadline ?? deadline;
-    const initialDeadline = currentCard.deadline || tomorrowISO();
+    const initialDeadline = currentCard.deadline || "";
     return (
       Boolean(nextTitle) ||
       !isEmptyHtml(nextDescription) ||
