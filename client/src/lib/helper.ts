@@ -823,6 +823,37 @@ export async function getNotificationPrefs(
   }
 }
 
+export type TestEmailStatus =
+  | "sent"
+  | "failed"
+  | "no_email"
+  | "not_configured"
+  | "cooldown";
+
+export type TestEmailResult = {
+  status: TestEmailStatus;
+  email?: string;
+  retryAfterSeconds?: number;
+};
+
+export async function sendNotificationTest(
+  userId: string
+): Promise<TestEmailResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/user/notification-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    const data = await res.json().catch(() => null);
+    if (data?.status) return data as TestEmailResult;
+    return { status: "failed" };
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 export async function updateNotificationPrefs(
   userId: string,
   notificationPrefs: NotificationPrefs

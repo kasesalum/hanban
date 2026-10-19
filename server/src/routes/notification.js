@@ -1,11 +1,15 @@
 import express from "express";
+import admin from "firebase-admin";
 import { db } from "../firebase.js";
+import { isMailConfigured, sendTestNotificationEmail } from "../mailer.js";
 import {
   EMAIL_PREF_KEYS,
   mergeNotificationPrefs,
 } from "../notifications.js";
 
 const router = express.Router();
+const TEST_EMAIL_COOLDOWN_MS = 60_000;
+const testEmailSentAt = new Map();
 
 // GET /api/user/notification-prefs?userId=
 router.get("/notification-prefs", async (req, res) => {
@@ -61,6 +65,56 @@ router.patch("/notification-prefs", async (req, res) => {
     res.json({ notificationPrefs: next });
   } catch (error) {
     console.error("Error updating notification prefs:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/user/notification-test
+router.post("/notification-test", async (req, res) => {
+  try {
+    const userId = String(req.body?.userId || "");
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    const lastSentAt = testEmailSentAt.get(userId) || 0;
+    const elapsed = Date.now() - lastSentAt;
+    if (lastSentAt && elapsed < TEST_EMAIL_COOLDOWN_MS) {
+      return res.status(429).json({
+        status: "cooldown",
+        retryAfterSeconds: Math.ceil((TEST_EMAIL_COOLDOWN_MS - elapsed) / 1000),
+      });
+    }
+
+    let record;
+    try {
+      record = await admin.auth().getUser(userId);
+    } catch (error) {
+      if (error?.code === "auth/user-not-found") {
+        return res.status(404).json({ status: "no_email" });
+      }
+      throw error;
+    }
+
+    const email = String(record.email || "").trim();
+    if (!email) {
+      return res.status(400).json({ status: "no_email" });
+    }
+
+    if (!isMailConfigured()) {
+      return res.status(503).json({ status: "not_configured", email });
+    }
+
+    testEmailSentAt.set(userId, Date.now());
+    const sent = await sendTestNotificationEmail(email);
+    if (!sent) {
+      testEmailSentAt.delete(userId);
+      return res.status(502).json({ status: "failed", email });
+    }
+
+    res.json({ status: "sent", email });
+  } catch (error) {
+    console.error("Error sending test email:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

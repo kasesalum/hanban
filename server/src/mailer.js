@@ -46,6 +46,39 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function testEmailMessage() {
+  const link = (process.env.FRONTEND_URL || "http://localhost:3000").replace(
+    /\/$/,
+    ""
+  );
+  const heading = "Hanban test email";
+  const text = [
+    "This is a test from Hanban.",
+    "If you can read this, Hanban can send email to this address.",
+    "",
+    "A real notification looks similar: a short note about a board or card, and a link back to Hanban.",
+    "",
+    `Open Hanban: ${link}`,
+  ].join("\n");
+  return {
+    subject: heading,
+    text,
+    html: wrapEmail({
+      heading,
+      link,
+      bodyHtml: `
+        <p>This is a test from Hanban. If you can read this, Hanban can send email to this address.</p>
+        <p>A real notification looks similar: a short note about a board or card, and a link back to Hanban.</p>
+      `,
+    }),
+  };
+}
+
+export async function sendTestNotificationEmail(to) {
+  const message = testEmailMessage();
+  return sendMail({ to, ...message });
+}
+
 export async function sendMail({ to, subject, text, html }) {
   const transport = getTransporter();
   if (!transport) return false;

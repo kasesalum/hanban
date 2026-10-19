@@ -19,10 +19,30 @@ import {
   getNotificationPrefs,
   NotificationPrefs,
   NotificationType,
+  sendNotificationTest,
+  TestEmailResult,
   updateNotificationPrefs,
   uploadAvatar,
 } from "@/lib/helper";
 import { Bell, CircleUser, Pen } from "lucide-react";
+
+function testResultMessage(result: TestEmailResult, fallbackEmail?: string) {
+  const email = result.email || fallbackEmail || "your address";
+  if (result.status === "sent") {
+    return `Sent a test to ${email}. Check your inbox and spam folder. It can take a minute.`;
+  }
+  if (result.status === "not_configured") {
+    return "This server is not set up to send email, so notification mail cannot go out.";
+  }
+  if (result.status === "no_email") {
+    return "This account has no email address.";
+  }
+  if (result.status === "cooldown") {
+    const seconds = result.retryAfterSeconds ?? 60;
+    return `Wait ${seconds} seconds before sending another test.`;
+  }
+  return "Hanban could not deliver the test. Confirm the address and try again.";
+}
 
 interface DashboardPageProps {
   userName: string;
@@ -48,6 +68,8 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [prefsSaving, setPrefsSaving] = useState(false);
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<TestEmailResult | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -168,6 +190,15 @@ export default function AccountPage({ userName }: DashboardPageProps) {
   const handleEmailEnabled = (emailEnabled: boolean) => {
     if (!prefs) return;
     savePrefs({ ...prefs, emailEnabled });
+  };
+
+  const handleTestEmail = async () => {
+    if (!user || testSending || !user.email) return;
+    setTestSending(true);
+    setTestResult(null);
+    const result = await sendNotificationTest(user.uid);
+    setTestSending(false);
+    setTestResult(result || { status: "failed" });
   };
 
   const handleEmailType = (key: NotificationType, enabled: boolean) => {
@@ -366,6 +397,65 @@ export default function AccountPage({ userName }: DashboardPageProps) {
                     </li>
                   ))}
                 </ul>
+                <div className="space-y-3 border-t border-border pt-4">
+                  {user?.email && (
+                    <p className="text-sm text-gray-400">
+                      Test messages go to {user.email}.
+                    </p>
+                  )}
+                  {(!user?.email ||
+                    !user.emailVerified ||
+                    !prefs.emailEnabled ||
+                    EMAIL_PREF_OPTIONS.every(
+                      (option) => prefs.email[option.key] === false
+                    )) && (
+                    <ul className="space-y-1 text-sm text-amber-200">
+                      {!user?.email && (
+                        <li>This account has no email address.</li>
+                      )}
+                      {user?.email && !user.emailVerified && (
+                        <li>
+                          This email is not verified, so the address may be
+                          wrong.
+                        </li>
+                      )}
+                      {!prefs.emailEnabled && (
+                        <li>
+                          Email notifications are off, so Hanban will not email
+                          real updates until that switch is on.
+                        </li>
+                      )}
+                      {prefs.emailEnabled &&
+                        EMAIL_PREF_OPTIONS.every(
+                          (option) => prefs.email[option.key] === false
+                        ) && (
+                          <li>
+                            Every notification type is off, so Hanban will not
+                            email real updates until one is turned on.
+                          </li>
+                        )}
+                    </ul>
+                  )}
+                  <button
+                    type="button"
+                    disabled={testSending || !user?.email}
+                    onClick={handleTestEmail}
+                    className="rounded-lg bg-foreground text-background px-4 py-2 text-sm font-medium hover:bg-border-hover disabled:opacity-50"
+                  >
+                    {testSending ? "Sending…" : "Send test email"}
+                  </button>
+                  {testResult && (
+                    <p
+                      className={`text-sm ${
+                        testResult.status === "sent"
+                          ? "text-green-400"
+                          : "text-amber-200"
+                      }`}
+                    >
+                      {testResultMessage(testResult, user?.email)}
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </section>
