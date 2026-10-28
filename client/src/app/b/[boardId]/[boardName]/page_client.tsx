@@ -363,6 +363,18 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     if (cardId) handleMove(cardId, listId);
   };
 
+  const openDraft = (listId: string) => {
+    setOpenCard((prev) =>
+      prev?.isNew
+        ? { ...prev, listId }
+        : {
+            card: newDraftCard(),
+            listId,
+            isNew: true,
+          }
+    );
+  };
+
   const handleSetBlocked = async (visible: boolean) => {
     if (blockedSaving) return null;
     setBlockedSaving(true);
@@ -407,6 +419,17 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
           overlay
           primary={
             <>
+              {board && (
+                <button
+                  type="button"
+                  title="Add a ticket"
+                  onClick={() => openDraft("todo")}
+                  className="inline-flex items-center gap-2 text-sm px-2 py-1.5 rounded-md bg-black/40 border border-white/10 text-gray-200"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Add a ticket</span>
+                </button>
+              )}
               <BoardFilterMenu
                 assigneeFilter={assigneeFilter}
                 labelFilter={labelFilter}
@@ -537,17 +560,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setOpenCard((prev) =>
-                        prev?.isNew
-                          ? { ...prev, listId: column.id }
-                          : {
-                              card: newDraftCard(),
-                              listId: column.id,
-                              isNew: true,
-                            }
-                      );
-                    }}
+                    onClick={() => openDraft(column.id)}
                     className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
                   >
                     <Plus className="w-4 h-4" />
