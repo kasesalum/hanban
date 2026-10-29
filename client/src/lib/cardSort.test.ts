@@ -1,5 +1,6 @@
 import {
   defaultSortForList,
+  groupCardsByCancelledMonth,
   groupCardsByCompletedMonth,
   isDoneVisible,
   sortCards,
@@ -24,6 +25,27 @@ describe("groupCardsByCompletedMonth", () => {
     ]);
     expect(groups.map((group) => group.key)).toEqual(["2026-03", "2026-01"]);
     expect(groups[0].cards.map((card) => card.id)).toEqual(["b", "c"]);
+  });
+});
+
+describe("groupCardsByCancelledMonth", () => {
+  it("groups by cancelledAt", () => {
+    const groups = groupCardsByCancelledMonth([
+      {
+        id: "a",
+        title: "January",
+        cancelledAt: "2026-01-15T00:00:00.000Z",
+        createdAt: "2025-06-01T00:00:00.000Z",
+      },
+      {
+        id: "b",
+        title: "March",
+        cancelledAt: "2026-03-02T00:00:00.000Z",
+        createdAt: "2025-06-01T00:00:00.000Z",
+      },
+    ]);
+    expect(groups.map((group) => group.key)).toEqual(["2026-03", "2026-01"]);
+    expect(groups[0].cards.map((card) => card.id)).toEqual(["b"]);
   });
 });
 

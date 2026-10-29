@@ -162,6 +162,19 @@ export async function getBoardArchive(
   }
 }
 
+export async function getBoardBin(
+  boardId: string
+): Promise<{ cards: any[]; labels: any[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/board/${boardId}/bin`);
+    if (!res.ok) throw new Error("Failed to fetch board bin");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 /** * A helper function that creates a new board for a user.
  * It adds a new document to the "Boards" collection with the specified board name and user ID.
  * Returns the ID of the newly created board or null if an error occurs.
@@ -511,6 +524,7 @@ export type CardUpdateFields = {
   listId?: string;
   actorId?: string;
   descriptionAttachments?: { url: string; path: string }[];
+  cancelled?: boolean;
 };
 
 export async function updateBoardCard(
@@ -657,22 +671,6 @@ export async function uploadAvatar(
   } catch (err) {
     console.error(err);
     throw err;
-  }
-}
-
-export async function deleteBoardCard(
-  boardId: string,
-  cardId: string
-): Promise<{ lists: any[] } | null> {
-  try {
-    const res = await fetch(`${API_BASE}/api/board/${boardId}/cards/${cardId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete card");
-    return await res.json();
-  } catch (err) {
-    console.error(err);
-    return null;
   }
 }
 

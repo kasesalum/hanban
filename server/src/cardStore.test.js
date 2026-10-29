@@ -45,6 +45,22 @@ describe("toStoredCard", () => {
     assert.equal(stored.archived, true);
     assert.equal(stored.archivedAt, "2026-10-01T00:00:00.000Z");
   });
+
+  it("keeps cancel flags", () => {
+    const stored = toStoredCard(
+      {
+        id: "c1",
+        title: "Skip",
+        cancelled: true,
+        cancelledAt: "2026-10-02T00:00:00.000Z",
+      },
+      "todo"
+    );
+    assert.equal(stored.cancelled, true);
+    assert.equal(stored.cancelledAt, "2026-10-02T00:00:00.000Z");
+    assert.equal(stored.completedAt, undefined);
+    assert.equal(stored.archived, undefined);
+  });
 });
 
 describe("assembleLists", () => {

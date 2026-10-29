@@ -129,6 +129,7 @@ export function BoardSettingsMenu({
   onEditMembers,
   onEditInfo,
   archiveHref,
+  binHref,
   blockedVisible,
   blockedCardCount,
   onToggleBlocked,
@@ -137,6 +138,7 @@ export function BoardSettingsMenu({
   onEditMembers: () => void;
   onEditInfo?: () => void;
   archiveHref?: string;
+  binHref?: string;
   blockedVisible?: boolean;
   blockedCardCount?: number;
   onToggleBlocked?: (visible: boolean) => Promise<string | null>;
@@ -227,6 +229,11 @@ export function BoardSettingsMenu({
         {archiveHref ? (
           <Link href={archiveHref} className={itemClass}>
             Archive
+          </Link>
+        ) : null}
+        {binHref ? (
+          <Link href={binHref} className={itemClass}>
+            Bin
           </Link>
         ) : null}
       </div>

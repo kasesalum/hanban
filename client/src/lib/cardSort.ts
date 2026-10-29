@@ -88,10 +88,14 @@ export function isDoneVisible(card: SortableCard, now = Date.now()) {
   return now - stamp < ARCHIVE_AFTER_MS;
 }
 
-export function monthCompletedKey(card: SortableCard) {
-  const stamp = Date.parse(completionStamp(card));
-  const date = Number.isNaN(stamp) ? new Date(0) : new Date(stamp);
+function monthKey(stamp: string) {
+  const parsed = Date.parse(stamp);
+  const date = Number.isNaN(parsed) ? new Date(0) : new Date(parsed);
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function monthCompletedKey(card: SortableCard) {
+  return monthKey(completionStamp(card));
 }
 
 export function monthCompletedLabel(key: string) {
@@ -104,12 +108,13 @@ export function monthCompletedLabel(key: string) {
   });
 }
 
-export function groupCardsByCompletedMonth<T extends SortableCard>(
-  cards: T[]
+function groupCardsByMonth<T>(
+  cards: T[],
+  stampFor: (card: T) => string
 ): { key: string; label: string; cards: T[] }[] {
   const groups = new Map<string, T[]>();
   for (const card of cards) {
-    const key = monthCompletedKey(card);
+    const key = monthKey(stampFor(card));
     const list = groups.get(key) || [];
     list.push(card);
     groups.set(key, list);
@@ -121,4 +126,16 @@ export function groupCardsByCompletedMonth<T extends SortableCard>(
       label: monthCompletedLabel(key),
       cards: grouped,
     }));
+}
+
+export function groupCardsByCompletedMonth<T extends SortableCard>(
+  cards: T[]
+): { key: string; label: string; cards: T[] }[] {
+  return groupCardsByMonth(cards, completionStamp);
+}
+
+export function groupCardsByCancelledMonth<T extends { cancelledAt?: string }>(
+  cards: T[]
+): { key: string; label: string; cards: T[] }[] {
+  return groupCardsByMonth(cards, (card) => card.cancelledAt || "");
 }

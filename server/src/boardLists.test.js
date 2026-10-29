@@ -19,6 +19,11 @@ describe("hasCardPatchFields", () => {
   it("rejects actorId alone as missing fields", () => {
     assert.equal(hasCardPatchFields({ actorId: "x" }), false);
   });
+
+  it("accepts a cancel payload", () => {
+    assert.equal(hasCardPatchFields({ cancelled: true }), true);
+    assert.equal(hasCardPatchFields({ cancelled: false }), true);
+  });
 });
 
 describe("blocked column", () => {

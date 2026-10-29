@@ -223,6 +223,7 @@ export function hasCardPatchFields(body) {
     Array.isArray(payload.assignees) ||
     Array.isArray(payload.labels) ||
     typeof payload.label === "string" ||
-    typeof payload.deadline === "string"
+    typeof payload.deadline === "string" ||
+    typeof payload.cancelled === "boolean"
   );
 }

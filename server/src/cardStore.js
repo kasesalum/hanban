@@ -37,6 +37,8 @@ export function toStoredCard(card, listId) {
   if (card.completedAt) stored.completedAt = card.completedAt;
   if (card.archived) stored.archived = true;
   if (card.archivedAt) stored.archivedAt = card.archivedAt;
+  if (card.cancelled) stored.cancelled = true;
+  if (card.cancelledAt) stored.cancelledAt = card.cancelledAt;
   if (card.originalDeadline) {
     stored.originalDeadline = String(card.originalDeadline);
   }

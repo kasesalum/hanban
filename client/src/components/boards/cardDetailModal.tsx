@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
+import { Check, MessageSquare, Plus, X } from "lucide-react";
 import {
   LabelChip,
   assigneeLabel,
@@ -61,6 +61,7 @@ export type DetailCard = {
   postponeCount?: number;
   postponedDays?: number;
   createdAt?: string;
+  cancelled?: boolean;
   comments?: CardComment[];
   activity?: CardActivity[];
 };
@@ -96,7 +97,8 @@ interface CardDetailModalProps {
     deadline?: string;
   }) => Promise<boolean>;
   onComment: (html: string, attachments: RichAttachment[]) => Promise<void>;
-  onDelete: () => Promise<void>;
+  onCancel: () => Promise<void>;
+  onRestore: () => Promise<void>;
   onSlip?: (slip: CardSlip) => void;
 }
 
@@ -198,7 +200,8 @@ export default function CardDetailModal({
   onUpdate,
   onCreate,
   onComment,
-  onDelete,
+  onCancel,
+  onRestore,
   onSlip,
 }: CardDetailModalProps) {
   const [title, setTitle] = useState("");
@@ -219,7 +222,7 @@ export default function CardDetailModal({
   const [membersOpen, setMembersOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [feedComments, setFeedComments] = useState<CardComment[]>([]);
   const [feedActivity, setFeedActivity] = useState<CardActivity[]>([]);
@@ -258,7 +261,7 @@ export default function CardDetailModal({
     setComment("");
     setCommentAttachments([]);
     setCommentKey((key) => key + 1);
-    setConfirmDelete(false);
+    setConfirmCancel(false);
     creatingRef.current = false;
     persistedRef.current = !isNew;
   }, [card?.id, isNew]);
@@ -508,43 +511,54 @@ export default function CardDetailModal({
               </option>
             ))}
           </select>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
             {!isNew &&
-              (confirmDelete ? (
+              (currentCard.cancelled ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    await onRestore();
+                    setBusy(false);
+                  }}
+                  className="px-2 py-1 rounded-md text-xs text-gray-200 hover:bg-border-hover disabled:opacity-50"
+                >
+                  Restore
+                </button>
+              ) : confirmCancel ? (
                 <>
-                  <span className="text-xs text-gray-400 hidden sm:inline">
-                    Delete this card?
+                  <span className="text-xs text-gray-400">
+                    Cancel this card? It will move to the Bin.
                   </span>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={async () => {
                       setBusy(true);
-                      await onDelete();
+                      await onCancel();
                       setBusy(false);
                     }}
                     className="px-2 py-1 rounded-md text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
                   >
-                    Delete
+                    Cancel card
                   </button>
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => setConfirmDelete(false)}
+                    onClick={() => setConfirmCancel(false)}
                     className="px-2 py-1 rounded-md text-xs text-gray-300 hover:bg-border-hover"
                   >
-                    Cancel
+                    Back
                   </button>
                 </>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-border-hover"
-                  aria-label="Delete card"
-                  title="Delete card"
+                  onClick={() => setConfirmCancel(true)}
+                  className="px-2 py-1 rounded-md text-xs text-gray-300 hover:bg-border-hover"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  Cancel card
                 </button>
               ))}
             <button

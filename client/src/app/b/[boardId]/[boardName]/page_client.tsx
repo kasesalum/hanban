@@ -27,7 +27,6 @@ import {
   addBoardMember,
   addCardComment,
   createBoardCard,
-  deleteBoardCard,
   FEATURE_BOARD_ID,
   FEATURE_BOARD_INFO,
   moveBoardCard,
@@ -215,6 +214,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     ? board?.info?.trim() || FEATURE_BOARD_INFO
     : board?.info || "";
   const archiveHref = `/b/${boardId}/${boardName}/archive`;
+  const binHref = `/b/${boardId}/${boardName}/bin`;
 
   const matchesFilters = (card: TaskCard) => {
     if (assigneeFilter === "me" && user?.uid && !card.assignees?.includes(user.uid)) {
@@ -254,6 +254,10 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
 
   const applyCardResult = (result: { card: any; lists: any[] }) => {
     commitBoard({ lists: result.lists });
+    if (result.card?.cancelled) {
+      setOpenCard(null);
+      return;
+    }
     const nextListId = result.lists.find((list: BoardList) =>
       (list.cards || []).some((item) => item.id === result.card.id)
     )?.id;
@@ -315,12 +319,22 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     );
   };
 
-  const handleDeleteCard = async () => {
+  const handleCancelCard = async () => {
     if (!openCard || openCard.isNew) return;
-    const result = await deleteBoardCard(boardId, openCard.card.id);
-    if (!result) return;
-    commitBoard({ lists: result.lists });
-    setOpenCard(null);
+    const result = await updateBoardCard(boardId, openCard.card.id, {
+      cancelled: true,
+      actorId: user?.uid,
+    });
+    if (result) applyCardResult(result);
+  };
+
+  const handleRestoreCard = async () => {
+    if (!openCard || openCard.isNew) return;
+    const result = await updateBoardCard(boardId, openCard.card.id, {
+      cancelled: false,
+      actorId: user?.uid,
+    });
+    if (result) applyCardResult(result);
   };
 
   const handleCreateCard = async (fields: {
@@ -442,6 +456,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
               />
               <BoardSettingsMenu
                 archiveHref={archiveHref}
+                binHref={binHref}
                 blockedVisible={Boolean(blockedList)}
                 blockedCardCount={blockedList?.cards?.length || 0}
                 onToggleBlocked={board ? handleSetBlocked : undefined}
@@ -467,6 +482,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
               const sortKey = columnSort[column.id] || defaultSortForList(column.id);
               const visibleCards = sortCards(
                 (column.cards || []).filter((card) => {
+                  if (card.cancelled) return false;
                   if (column.id === "done" && !isDoneVisible(card)) return false;
                   return matchesFilters(card);
                 }),
@@ -595,7 +611,8 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
         onUpdate={handleUpdateCard}
         onCreate={handleCreateCard}
         onComment={handleComment}
-        onDelete={handleDeleteCard}
+        onCancel={handleCancelCard}
+        onRestore={handleRestoreCard}
         onSlip={handleSlip}
       />
       <BoardInfoModal

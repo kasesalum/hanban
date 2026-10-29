@@ -19,6 +19,9 @@ export type TicketCardData = {
   createdAt?: string;
   completedAt?: string;
   archived?: boolean;
+  listId?: string;
+  cancelled?: boolean;
+  cancelledAt?: string;
 };
 
 export default function TicketCard({

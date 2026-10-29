@@ -47,7 +47,7 @@ describe("groupUserTickets", () => {
     assert.deepEqual(result.inProgress[0].boardLabels, boardLabels);
   });
 
-  it("drops done, blocked, archived, and unassigned cards", () => {
+  it("drops done, blocked, archived, cancelled, and unassigned cards", () => {
     const result = groupUserTickets("me", [
       board([
         { id: "done", title: "Done", listId: "done", assignees: ["me"] },
@@ -63,6 +63,13 @@ describe("groupUserTickets", () => {
           listId: "todo",
           assignees: ["me"],
           archived: true,
+        },
+        {
+          id: "cancelled",
+          title: "Cancelled",
+          listId: "todo",
+          assignees: ["me"],
+          cancelled: true,
         },
         {
           id: "other",

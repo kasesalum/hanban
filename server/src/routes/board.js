@@ -15,7 +15,12 @@ import {
   withDefaultLabels,
   withoutBlockedList,
 } from "../boardLists.js";
-import { applyDoneTransition } from "../cardArchive.js";
+import {
+  applyDoneTransition,
+  cancelCard,
+  clearCancelled,
+  restoreCard,
+} from "../cardArchive.js";
 import {
   deadlineActivityText,
   needsSlipBackfill,
@@ -25,12 +30,10 @@ import {
 import { prepareCardDocs } from "../cardArchives.js";
 import {
   applyCardToLists,
-  deleteCardDoc,
   findCard,
   listsForBoardClient,
   loadAssembledLists,
   moveCardInLists,
-  removeCardFromLists,
   replaceCardInLists,
   saveBoardLists,
   writeCardDoc,
@@ -46,7 +49,6 @@ import {
 import {
   addActivity,
   addComment,
-  deleteCardFeed,
   listCardActivity,
   listFeed,
   migrateNestedCard,
@@ -194,6 +196,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       deadline,
       actorId,
       descriptionAttachments,
+      cancelled,
     } = req.body || {};
     const actor = String(actorId || "");
 
@@ -203,6 +206,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const hasAssignees = Array.isArray(assignees);
     const hasLabels = Array.isArray(cardLabels) || typeof label === "string";
     const hasDeadline = typeof deadline === "string";
+    const hasCancelled = typeof cancelled === "boolean";
 
     if (!hasCardPatchFields(req.body)) {
       return res.status(400).json({ error: "Missing fields" });
@@ -395,6 +399,29 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       card.labels = normalizeCardLabelIds(card);
     }
     delete card.label;
+
+    if (hasCancelled && cancelled === true) {
+      if (!card.cancelled) {
+        card = cancelCard(card);
+        pendingActivity.push({
+          userId: actor,
+          type: "cancel",
+          text: "cancelled this card",
+        });
+      }
+    } else if (hasCancelled && cancelled === false) {
+      if (card.cancelled) {
+        card = restoreCard(card);
+        pendingActivity.push({
+          userId: actor,
+          type: "restore",
+          text: "restored this card",
+        });
+      }
+    } else if (card.cancelled && hasList && listId !== previousListId) {
+      card = clearCancelled(card);
+    }
+
     lists = replaceCardInLists(lists, card);
 
     const nextListId = hasList ? listId : previousListId;
@@ -420,7 +447,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     };
     const jobs = [];
 
-    if (finalListId !== "done") {
+    if (finalListId !== "done" && !card.cancelled) {
       if (addedAssignees.length > 0) {
         jobs.push(
           notifyUsers({
@@ -593,7 +620,7 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     });
 
     const boardData = boardSnap.data();
-    if (found.list.id !== "done") {
+    if (found.list.id !== "done" && !found.card.cancelled) {
       notifyUsers({
         type: NOTIFICATION_TYPES.commentAdded,
         userIds: found.card.assignees || [],
@@ -615,36 +642,6 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     });
   } catch (error) {
     console.error("Error adding comment:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// DELETE /api/board/:id/cards/:cardId
-router.delete("/:id/cards/:cardId", async (req, res) => {
-  try {
-    const { id: boardId, cardId } = req.params;
-    const boardRef = db.collection("Boards").doc(boardId);
-    const boardSnap = await boardRef.get();
-    if (!boardSnap.exists) {
-      return res.status(404).json({ error: "Board not found" });
-    }
-
-    const lists = await loadAssembledLists(boardId, boardSnap.data(), {
-      includeHidden: true,
-      persist: false,
-    });
-    const found = findCard(lists, cardId);
-    if (!found) {
-      return res.status(404).json({ error: "Card not found" });
-    }
-
-    const nextLists = removeCardFromLists(lists, cardId);
-    await deleteCardDoc(boardId, cardId);
-    await saveBoardLists(boardRef, nextLists, boardSnap.data());
-    await deleteCardFeed(boardId, cardId);
-    res.json({ lists: listsForBoardClient(nextLists) });
-  } catch (error) {
-    console.error("Error deleting card:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -946,7 +943,7 @@ router.get("/:id/archive", async (req, res) => {
 
     const data = boardSnap.data();
     const cards = (await prepareCardDocs(boardId, { persist: true }))
-      .filter((card) => card.archived)
+      .filter((card) => card.archived && !card.cancelled)
       .sort((a, b) =>
         String(b.completedAt || b.archivedAt || "").localeCompare(
           String(a.completedAt || a.archivedAt || "")
@@ -957,6 +954,31 @@ router.get("/:id/archive", async (req, res) => {
     res.json({ cards, labels: withDefaultLabels(data) });
   } catch (error) {
     console.error("Error fetching board archive:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/board/:id/bin
+router.get("/:id/bin", async (req, res) => {
+  try {
+    const boardId = req.params.id;
+    const boardRef = db.collection("Boards").doc(boardId);
+    const boardSnap = await boardRef.get();
+    if (!boardSnap.exists) {
+      return res.status(404).json({ error: "Board not found" });
+    }
+
+    const data = boardSnap.data();
+    const cards = (await prepareCardDocs(boardId, { persist: true }))
+      .filter((card) => card.cancelled)
+      .sort((a, b) =>
+        String(b.cancelledAt || "").localeCompare(String(a.cancelledAt || ""))
+      )
+      .map((card) => stripCardFeed(card));
+
+    res.json({ cards, labels: withDefaultLabels(data) });
+  } catch (error) {
+    console.error("Error fetching board bin:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

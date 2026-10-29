@@ -15,7 +15,6 @@ import HeaderActions from "@/components/navigation/headerActions";
 import { auth } from "@/lib/firebase";
 import {
   addCardComment,
-  deleteBoardCard,
   getBoardArchive,
   moveBoardCard,
   updateBoardCard,
@@ -166,14 +165,15 @@ export default function ArchivePage({
 
   const applyCardResult = (result: { card: any; lists: any[] }) => {
     commitBoard({ lists: result.lists });
+    const staysInArchive = result.card?.archived && !result.card?.cancelled;
     setCards((prev) =>
-      result.card?.archived
+      staysInArchive
         ? prev.map((card) =>
             card.id === result.card.id ? { ...card, ...result.card } : card
           )
         : prev.filter((card) => card.id !== result.card.id)
     );
-    if (!result.card?.archived) {
+    if (!staysInArchive) {
       setOpenCard(null);
       return;
     }
@@ -233,13 +233,22 @@ export default function ArchivePage({
     );
   };
 
-  const handleDeleteCard = async () => {
+  const handleCancelCard = async () => {
     if (!openCard) return;
-    const result = await deleteBoardCard(boardId, openCard.card.id);
-    if (!result) return;
-    commitBoard({ lists: result.lists });
-    setCards((prev) => prev.filter((card) => card.id !== openCard.card.id));
-    setOpenCard(null);
+    const result = await updateBoardCard(boardId, openCard.card.id, {
+      cancelled: true,
+      actorId: user?.uid,
+    });
+    if (result) applyCardResult(result);
+  };
+
+  const handleRestoreCard = async () => {
+    if (!openCard) return;
+    const result = await updateBoardCard(boardId, openCard.card.id, {
+      cancelled: false,
+      actorId: user?.uid,
+    });
+    if (result) applyCardResult(result);
   };
 
   return (
@@ -314,7 +323,8 @@ export default function ArchivePage({
         }}
         onUpdate={handleUpdateCard}
         onComment={handleComment}
-        onDelete={handleDeleteCard}
+        onCancel={handleCancelCard}
+        onRestore={handleRestoreCard}
         onSlip={handleSlip}
       />
     </BoardWorkspace>

@@ -36,7 +36,7 @@ export function groupUserTickets(userId, boards) {
   for (const board of boards || []) {
     const boardLabels = withDefaultLabels(board);
     for (const card of board.cards || []) {
-      if (!card || card.archived) continue;
+      if (!card || card.archived || card.cancelled) continue;
       if (!ACTIVE_LISTS.has(card.listId)) continue;
       const assignees = Array.isArray(card.assignees) ? card.assignees : [];
       if (!assignees.includes(userId)) continue;
