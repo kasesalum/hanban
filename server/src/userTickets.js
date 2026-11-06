@@ -1,9 +1,13 @@
-import { normalizeCardLabelIds, withDefaultLabels } from "./boardLists.js";
+import {
+  normalizeCardLabelIds,
+  parsePriority,
+  withDefaultLabels,
+} from "./boardLists.js";
 
 const ACTIVE_LISTS = new Set(["todo", "in-progress"]);
 
 function toTicket(board, card, boardLabels) {
-  return {
+  const ticket = {
     id: card.id,
     title: card.title || "",
     description: card.description || "",
@@ -17,6 +21,9 @@ function toTicket(board, card, boardLabels) {
     urlName: board.urlName || "",
     boardLabels,
   };
+  const priority = parsePriority(card.priority);
+  if (priority) ticket.priority = priority;
+  return ticket;
 }
 
 function compareTickets(a, b) {

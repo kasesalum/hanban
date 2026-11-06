@@ -26,6 +26,7 @@ describe("groupUserTickets", () => {
           assignees: ["me", "other"],
           labels: ["Bug"],
           deadline: "2026-10-20",
+          priority: "high",
           postponedDays: 21,
         },
       ]),
@@ -44,12 +45,20 @@ describe("groupUserTickets", () => {
     assert.equal(result.inProgress[0].urlName, "alpha");
     assert.deepEqual(result.inProgress[0].labels, ["Bug"]);
     assert.equal(result.inProgress[0].postponedDays, 21);
+    assert.equal(result.inProgress[0].priority, "high");
+    assert.equal(result.todo[0].priority, undefined);
     assert.deepEqual(result.inProgress[0].boardLabels, boardLabels);
   });
 
-  it("drops done, blocked, archived, cancelled, and unassigned cards", () => {
+  it("drops on hold, done, blocked, archived, cancelled, and unassigned cards", () => {
     const result = groupUserTickets("me", [
       board([
+        {
+          id: "on-hold",
+          title: "On hold",
+          listId: "on-hold",
+          assignees: ["me"],
+        },
         { id: "done", title: "Done", listId: "done", assignees: ["me"] },
         {
           id: "blocked",

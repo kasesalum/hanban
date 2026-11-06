@@ -61,6 +61,26 @@ describe("toStoredCard", () => {
     assert.equal(stored.completedAt, undefined);
     assert.equal(stored.archived, undefined);
   });
+
+  it("keeps a valid priority and drops an empty or invalid one", () => {
+    const stored = toStoredCard(
+      { id: "c1", title: "Rush", priority: "high" },
+      "todo"
+    );
+    assert.equal(stored.priority, "high");
+
+    const cleared = toStoredCard(
+      { id: "c2", title: "Later", priority: "" },
+      "todo"
+    );
+    assert.equal(cleared.priority, undefined);
+
+    const invalid = toStoredCard(
+      { id: "c3", title: "Nope", priority: "urgent" },
+      "todo"
+    );
+    assert.equal(invalid.priority, undefined);
+  });
 });
 
 describe("assembleLists", () => {

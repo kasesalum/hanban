@@ -23,6 +23,46 @@ export function findBoardLabel(labels: BoardLabel[] | undefined, id?: string) {
   return (labels || DEFAULT_BOARD_LABELS).find((label) => label.id === id);
 }
 
+export type TicketPriority = "high" | "medium" | "low";
+
+const PRIORITY_CHIP: Record<
+  TicketPriority,
+  { label: string; className: string }
+> = {
+  high: {
+    label: "High",
+    className: "border-red-500 text-red-300 bg-red-500/25",
+  },
+  medium: {
+    label: "Medium",
+    className: "border-amber-400/60 text-amber-200 bg-amber-500/20",
+  },
+  low: {
+    label: "Low",
+    className: "border-border text-gray-300 bg-black/30",
+  },
+};
+
+export function PriorityChip({
+  priority,
+  className = "",
+}: {
+  priority?: string;
+  className?: string;
+}) {
+  if (priority !== "high" && priority !== "medium" && priority !== "low") {
+    return null;
+  }
+  const tone = PRIORITY_CHIP[priority];
+  return (
+    <span
+      className={`inline-block uppercase tracking-wide rounded border ${tone.className} ${className}`}
+    >
+      {tone.label}
+    </span>
+  );
+}
+
 export function cardLabelIds(card?: {
   labels?: string[];
   label?: string;
@@ -72,6 +112,7 @@ export interface BoardCardData {
   label?: string;
   labelIds?: string[];
   deadline?: string;
+  priority?: TicketPriority;
   postponedDays?: number;
 }
 
@@ -140,6 +181,7 @@ export default function BoardCard({
   const hasMeta =
     labelIds.length > 0 ||
     Boolean(board.deadline) ||
+    Boolean(board.priority) ||
     Boolean(board.postponedDays && board.postponedDays > 0) ||
     (board.assignees && board.assignees.length > 0);
   const clickable = Boolean(onOpen || openBoard);
@@ -249,6 +291,14 @@ export default function BoardCard({
               </p>
             )}
             <div className="flex flex-wrap gap-1">
+              <PriorityChip
+                priority={board.priority}
+                className={
+                  compact
+                    ? "text-xs font-semibold px-2 py-1"
+                    : "text-[10px] px-1.5 py-0.5"
+                }
+              />
               {labelIds.map((id) => (
                 <LabelChip key={id} labelId={id} labels={labels} />
               ))}

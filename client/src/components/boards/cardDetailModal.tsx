@@ -22,7 +22,12 @@ import RichTextEditor, {
 } from "@/components/boards/richTextEditor";
 import TicketTimeline from "@/components/boards/ticketTimeline";
 import Loading from "@/components/loading";
-import { getCardFeed, type CardSlip, uploadCardImage } from "@/lib/helper";
+import {
+  getCardFeed,
+  uploadCardImage,
+  type CardSlip,
+  type TicketPriority,
+} from "@/lib/helper";
 
 export type CardComment = {
   id: string;
@@ -57,6 +62,7 @@ export type DetailCard = {
   labels?: string[];
   label?: string;
   deadline?: string;
+  priority?: TicketPriority;
   originalDeadline?: string;
   postponeCount?: number;
   postponedDays?: number;
@@ -73,6 +79,7 @@ type CardFields = {
   assignees?: string[];
   labels?: string[];
   deadline?: string;
+  priority?: TicketPriority | "";
 };
 
 interface CardDetailModalProps {
@@ -95,6 +102,7 @@ interface CardDetailModalProps {
     assignees?: string[];
     labels?: string[];
     deadline?: string;
+    priority?: TicketPriority | "";
   }) => Promise<boolean>;
   onComment: (html: string, attachments: RichAttachment[]) => Promise<void>;
   onCancel: () => Promise<void>;
@@ -212,6 +220,7 @@ export default function CardDetailModal({
   const [assignees, setAssignees] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [deadline, setDeadline] = useState("");
+  const [priority, setPriority] = useState<TicketPriority | "">("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [comment, setComment] = useState("");
   const [commentAttachments, setCommentAttachments] = useState<RichAttachment[]>(
@@ -257,6 +266,7 @@ export default function CardDetailModal({
       setSelectedLabels(ids);
     }
     setDeadline(card.deadline || "");
+    setPriority(card.priority || "");
     setEditingDescription(false);
     setComment("");
     setCommentAttachments([]);
@@ -350,13 +360,16 @@ export default function CardDetailModal({
     const nextAssignees = fields?.assignees ?? assignees;
     const nextLabelIds = fields?.labels ?? selectedLabels;
     const nextDeadline = fields?.deadline ?? deadline;
+    const nextPriority = fields?.priority ?? priority;
     const initialDeadline = currentCard.deadline || "";
+    const initialPriority = currentCard.priority || "";
     return (
       Boolean(nextTitle) ||
       !isEmptyHtml(nextDescription) ||
       nextAssignees.length > 0 ||
       nextLabelIds.length > 0 ||
-      Boolean(nextDeadline && nextDeadline !== initialDeadline)
+      Boolean(nextDeadline && nextDeadline !== initialDeadline) ||
+      Boolean(nextPriority && nextPriority !== initialPriority)
     );
   }
 
@@ -371,6 +384,7 @@ export default function CardDetailModal({
         assignees: payload.assignees ?? assignees,
         labels: payload.labels ?? selectedLabelsRef.current,
         deadline: payload.deadline ?? deadline,
+        priority: payload.priority ?? priority,
       });
       creatingRef.current = false;
       if (created) persistedRef.current = true;
@@ -403,6 +417,7 @@ export default function CardDetailModal({
       setSelectedLabels(fields.labels);
     }
     if (fields.deadline !== undefined) setDeadline(fields.deadline);
+    if (fields.priority !== undefined) setPriority(fields.priority);
 
     const payload: CardFields = {
       ...fields,
@@ -713,6 +728,27 @@ export default function CardDetailModal({
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <p className="mb-1.5 text-xs uppercase tracking-wide text-gray-400">
+                  Priority
+                </p>
+                <select
+                  value={priority}
+                  aria-label="Priority"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const next = event.target.value as TicketPriority | "";
+                    void save({ priority: next });
+                  }}
+                  className="px-2.5 py-1.5 rounded-md border border-border bg-background-alt text-sm text-gray-100"
+                >
+                  <option value="">None</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
               </div>
 
               <div>

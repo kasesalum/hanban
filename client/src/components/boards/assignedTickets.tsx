@@ -1,6 +1,6 @@
 "use client";
 
-import { LabelChip } from "@/components/boards/boardCard";
+import { LabelChip, PriorityChip } from "@/components/boards/boardCard";
 import Loading from "@/components/loading";
 import { PostponeChip } from "@/components/boards/postponeChip";
 import { isDeadlineOverdue } from "@/components/boards/deadlinePicker";
@@ -51,9 +51,14 @@ function TicketColumn({
                     {ticket.boardName || "Untitled Board"}
                   </p>
                   {(ticket.labels.length > 0 ||
+                    ticket.priority ||
                     ticket.deadline ||
                     ticket.postponedDays > 0) && (
                     <div className="flex flex-wrap gap-1 pt-0.5">
+                      <PriorityChip
+                        priority={ticket.priority}
+                        className="text-xs font-semibold px-2 py-1"
+                      />
                       {ticket.labels.map((id) => (
                         <LabelChip
                           key={id}

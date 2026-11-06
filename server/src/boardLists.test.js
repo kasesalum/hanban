@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   hasCardPatchFields,
+  pausesNotifications,
   withBlockedList,
   withDefaultLists,
   withoutBlockedList,
@@ -24,6 +25,11 @@ describe("hasCardPatchFields", () => {
     assert.equal(hasCardPatchFields({ cancelled: true }), true);
     assert.equal(hasCardPatchFields({ cancelled: false }), true);
   });
+
+  it("accepts a priority payload, including a clear", () => {
+    assert.equal(hasCardPatchFields({ priority: "high" }), true);
+    assert.equal(hasCardPatchFields({ priority: "" }), true);
+  });
 });
 
 describe("blocked column", () => {
@@ -43,8 +49,16 @@ describe("blocked column", () => {
     const lists = withDefaultLists({ lists: boardLists });
     assert.deepEqual(
       lists.map((list) => list.id),
-      ["todo", "blocked", "in-progress", "done"]
+      ["on-hold", "todo", "blocked", "in-progress", "done"]
     );
+  });
+
+  it("inserts an empty On hold column at the front", () => {
+    const lists = withDefaultLists({ lists: boardLists });
+    assert.equal(lists[0].id, "on-hold");
+    assert.equal(lists[0].title, "On hold");
+    assert.deepEqual(lists[0].cardIds, []);
+    assert.deepEqual(lists[0].cards, []);
   });
 
   it("does not put Blocked back after it was removed", () => {
@@ -54,6 +68,10 @@ describe("blocked column", () => {
     assert.equal(
       lists.some((list) => list.id === "blocked"),
       false
+    );
+    assert.deepEqual(
+      lists.map((list) => list.id),
+      ["on-hold", "todo", "in-progress", "done"]
     );
   });
 
@@ -89,5 +107,18 @@ describe("blocked column", () => {
     );
     assert.deepEqual(lists[1].cardIds, []);
     assert.deepEqual(lists[1].cards, []);
+  });
+});
+
+describe("pausesNotifications", () => {
+  it("pauses done and on hold", () => {
+    assert.equal(pausesNotifications("done"), true);
+    assert.equal(pausesNotifications("on-hold"), true);
+  });
+
+  it("leaves the other lists active", () => {
+    for (const listId of ["todo", "blocked", "in-progress"]) {
+      assert.equal(pausesNotifications(listId), false);
+    }
   });
 });

@@ -1,9 +1,14 @@
 export const DEFAULT_LISTS = [
+  { id: "on-hold", title: "On hold", cards: [] },
   { id: "todo", title: "To Do", cards: [] },
   { id: "blocked", title: "Blocked", cards: [] },
   { id: "in-progress", title: "In Progress", cards: [] },
   { id: "done", title: "Done", cards: [] },
 ];
+
+export function pausesNotifications(listId) {
+  return listId === "done" || listId === "on-hold";
+}
 
 export const DEFAULT_LABELS = [
   { id: "Bug", name: "Bug", color: "#ef4444" },
@@ -214,6 +219,30 @@ export function parseCardLabelIds(body, catalog) {
   return ids;
 }
 
+export const CARD_PRIORITIES = ["high", "medium", "low"];
+
+const PRIORITY_LABELS = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export function parsePriority(value) {
+  if (value == null || value === "") return "";
+  const next = String(value);
+  if (!CARD_PRIORITIES.includes(next)) return null;
+  return next;
+}
+
+export function priorityActivityText(previous, next) {
+  const prev = previous || "";
+  const value = next || "";
+  const label = (id) => PRIORITY_LABELS[id] || id;
+  if (!value) return "cleared the priority";
+  if (!prev) return `set the priority to ${label(value)}`;
+  return `changed the priority from ${label(prev)} to ${label(value)}`;
+}
+
 export function hasCardPatchFields(body) {
   const payload = body || {};
   return (
@@ -224,6 +253,7 @@ export function hasCardPatchFields(body) {
     Array.isArray(payload.labels) ||
     typeof payload.label === "string" ||
     typeof payload.deadline === "string" ||
+    typeof payload.priority === "string" ||
     typeof payload.cancelled === "boolean"
   );
 }

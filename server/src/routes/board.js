@@ -11,6 +11,9 @@ import {
   listsPayload,
   normalizeCardLabelIds,
   parseCardLabelIds,
+  parsePriority,
+  priorityActivityText,
+  pausesNotifications,
   withBlockedList,
   withDefaultLabels,
   withoutBlockedList,
@@ -97,6 +100,7 @@ router.post("/:id/cards", async (req, res) => {
       label,
       labels: cardLabels,
       deadline,
+      priority,
       actorId,
     } = req.body || {};
     const actor = String(actorId || "");
@@ -135,12 +139,18 @@ router.post("/:id/cards", async (req, res) => {
       return res.status(400).json({ error: "Invalid label" });
     }
 
+    const parsedPriority = parsePriority(priority);
+    if (parsedPriority === null) {
+      return res.status(400).json({ error: "Invalid priority" });
+    }
+
     const card = {
       id: randomUUID(),
       title: String(title || "").trim().substring(0, 120) || "Untitled",
       description: description ? sanitizeHtml(String(description)) : "",
       assignees: assigneeIds,
       labels: labelIds,
+      ...(parsedPriority ? { priority: parsedPriority } : {}),
       deadline: deadline ? String(deadline) : "",
       originalDeadline: deadline ? String(deadline) : "",
       postponeCount: 0,
@@ -161,7 +171,7 @@ router.post("/:id/cards", async (req, res) => {
       assignees: assigneeIds,
     });
 
-    if (assigneeIds.length > 0 && listId !== "done") {
+    if (assigneeIds.length > 0 && !pausesNotifications(listId)) {
       notifyUsers({
         type: NOTIFICATION_TYPES.assigneeAdded,
         userIds: assigneeIds,
@@ -194,6 +204,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       label,
       labels: cardLabels,
       deadline,
+      priority,
       actorId,
       descriptionAttachments,
       cancelled,
@@ -206,6 +217,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     const hasAssignees = Array.isArray(assignees);
     const hasLabels = Array.isArray(cardLabels) || typeof label === "string";
     const hasDeadline = typeof deadline === "string";
+    const hasPriority = typeof priority === "string";
     const hasCancelled = typeof cancelled === "boolean";
 
     if (!hasCardPatchFields(req.body)) {
@@ -377,6 +389,25 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
       }
     }
 
+    if (hasPriority) {
+      const next = parsePriority(priority);
+      if (next === null) {
+        return res.status(400).json({ error: "Invalid priority" });
+      }
+      const prev = parsePriority(card.priority) || "";
+      if (next !== prev) {
+        pendingActivity.push({
+          userId: actor,
+          type: "priority",
+          text: priorityActivityText(prev, next),
+          previous: prev,
+          next,
+        });
+        if (next) card.priority = next;
+        else delete card.priority;
+      }
+    }
+
     if (hasList) {
       const target = lists.find((item) => item.id === listId);
       if (!target) {
@@ -447,7 +478,7 @@ router.patch("/:id/cards/:cardId", async (req, res) => {
     };
     const jobs = [];
 
-    if (finalListId !== "done" && !card.cancelled) {
+    if (!pausesNotifications(finalListId) && !card.cancelled) {
       if (addedAssignees.length > 0) {
         jobs.push(
           notifyUsers({
@@ -620,7 +651,7 @@ router.post("/:id/cards/:cardId/comments", async (req, res) => {
     });
 
     const boardData = boardSnap.data();
-    if (found.list.id !== "done" && !found.card.cancelled) {
+    if (!pausesNotifications(found.list.id) && !found.card.cancelled) {
       notifyUsers({
         type: NOTIFICATION_TYPES.commentAdded,
         userIds: found.card.assignees || [],

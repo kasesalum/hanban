@@ -46,7 +46,7 @@ import {
 } from "@/lib/cardSort";
 import { useBoardCache, useBoardInfo } from "@/lib/useBoards";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { ArrowUpDown, Plus } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, Plus } from "lucide-react";
 import Loading from "@/components/loading";
 import { useRouter } from "next/navigation";
 import { DragEvent, useEffect, useRef, useState } from "react";
@@ -86,6 +86,7 @@ type BoardInfo = {
 };
 
 const EMPTY_COLUMNS: BoardList[] = [
+  { id: "on-hold", title: "On hold", cards: [] },
   { id: "todo", title: "To Do", cards: [] },
   { id: "blocked", title: "Blocked", cards: [] },
   { id: "in-progress", title: "In Progress", cards: [] },
@@ -179,10 +180,32 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
   const [columnSort, setColumnSort] = useState<Record<string, SortKey>>({});
   const [confirmRemoveBlocked, setConfirmRemoveBlocked] = useState(false);
   const [blockedSaving, setBlockedSaving] = useState(false);
+  const [onHoldCollapsed, setOnHoldCollapsed] = useState(true);
   const openCardRef = useRef(openCard);
   openCardRef.current = openCard;
   const boardRef = useRef(board);
   boardRef.current = board;
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`onHoldCollapsed:${boardId}`);
+      setOnHoldCollapsed(stored !== "0");
+    } catch {
+      setOnHoldCollapsed(true);
+    }
+  }, [boardId]);
+
+  const persistOnHoldCollapsed = (collapsed: boolean) => {
+    setOnHoldCollapsed(collapsed);
+    try {
+      localStorage.setItem(
+        `onHoldCollapsed:${boardId}`,
+        collapsed ? "1" : "0"
+      );
+    } catch {
+      // The choice still applies until the page is reloaded.
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -275,6 +298,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     assignees?: string[];
     labels?: string[];
     deadline?: string;
+    priority?: "high" | "medium" | "low" | "";
   }) => {
     const current = openCardRef.current;
     if (!current || current.isNew) return;
@@ -343,6 +367,7 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     assignees?: string[];
     labels?: string[];
     deadline?: string;
+    priority?: "high" | "medium" | "low" | "";
   }) => {
     if (!openCard?.isNew) return false;
     const result = await createBoardCard(boardId, openCard.listId, {
@@ -374,7 +399,9 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
     event.preventDefault();
     setDragOverList(null);
     const cardId = event.dataTransfer.getData("text/plain");
-    if (cardId) handleMove(cardId, listId);
+    if (!cardId) return;
+    if (listId === "on-hold") persistOnHoldCollapsed(false);
+    handleMove(cardId, listId);
   };
 
   const openDraft = (listId: string) => {
@@ -488,6 +515,10 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                 }),
                 sortKey
               );
+              const collapsed = column.id === "on-hold" && onHoldCollapsed;
+              const columnFrame = dragOverList === column.id
+                ? "border-indigo-400"
+                : "border-border";
               return (
                 <section
                   key={column.id}
@@ -499,89 +530,125 @@ export default function BoardPage({ boardId, boardName }: BoardPageProps) {
                     setDragOverList((prev) => (prev === column.id ? null : prev))
                   }
                   onDrop={(event) => handleDrop(event, column.id)}
-                  className={`w-80 shrink-0 rounded-xl bg-background/90 border shadow-md flex flex-col max-h-full ${
-                    dragOverList === column.id
-                      ? "border-indigo-400"
-                      : "border-border"
-                  }`}
+                  className={
+                    collapsed
+                      ? `flex w-11 shrink-0 self-stretch h-full rounded-xl bg-background/90 border shadow-md ${columnFrame}`
+                      : `w-80 shrink-0 rounded-xl bg-background/90 border shadow-md flex flex-col max-h-full ${columnFrame}`
+                  }
                 >
-                  <div className="flex items-center justify-between gap-2 px-3 py-3">
-                    <h2 className="font-semibold text-gray-100 truncate min-w-0">
-                      {column.title}
-                    </h2>
-                    <label className="relative shrink-0 flex items-center text-gray-400">
-                      <ArrowUpDown className="w-3.5 h-3.5 pointer-events-none absolute left-1.5" />
-                      <select
-                        value={sortKey}
-                        aria-label={`Sort ${column.title}`}
-                        title="Sort list"
-                        onChange={(event) =>
-                          setColumnSort((prev) => ({
-                            ...prev,
-                            [column.id]: event.target.value as SortKey,
-                          }))
-                        }
-                        className="appearance-none pl-6 pr-1.5 py-1 w-[10.5rem] text-[11px] rounded-md bg-background-alt border border-border text-gray-300"
-                      >
-                        {SORT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {column.id === "blocked" && (
+                  {collapsed ? (
                     <button
                       type="button"
-                      disabled={blockedSaving}
-                      onClick={() => {
-                        const count = (column.cards || []).length;
-                        if (count > 0 && !confirmRemoveBlocked) {
-                          setConfirmRemoveBlocked(true);
-                          return;
-                        }
-                        void handleSetBlocked(false);
-                      }}
-                      className="mx-3 mb-2 px-2 py-1 rounded-md border border-white/15 text-left text-xs text-gray-200 hover:bg-border-hover disabled:opacity-50"
+                      aria-expanded={false}
+                      aria-label={`Expand ${column.title}`}
+                      onClick={() => persistOnHoldCollapsed(false)}
+                      className="flex h-full w-full flex-col items-center gap-3 py-3 text-gray-100"
                     >
-                      {confirmRemoveBlocked
-                        ? "Move cards to To Do and remove"
-                        : "Remove Blocked column"}
+                      <span className="font-semibold [writing-mode:vertical-lr]">
+                        {column.title}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {visibleCards.length}
+                      </span>
                     </button>
-                  )}
-                  <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
-                    {visibleCards.length === 0 && (
-                      <p className="px-1 text-sm text-gray-400">
-                        No cards yet
-                      </p>
-                    )}
-                    {visibleCards.map((card) => (
-                      <TicketCard
-                        key={card.id}
-                        card={card}
-                        listId={column.id}
-                        labels={boardLabels}
-                        currentUserId={user?.uid}
-                        memberProfiles={memberProfiles}
-                        draggable
-                        onDragStart={(event) => handleDragStart(event, card.id)}
-                        onMove={(nextListId) => handleMove(card.id, nextListId)}
-                        onOpen={() =>
-                          setOpenCard({ card, listId: column.id })
-                        }
-                      />
-                    ))}
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-2 px-3 py-3">
+                        <div className="flex items-center gap-1 min-w-0">
+                          {column.id === "on-hold" && (
+                            <button
+                              type="button"
+                              aria-expanded={true}
+                              aria-label={`Collapse ${column.title}`}
+                              onClick={() => persistOnHoldCollapsed(true)}
+                              className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-border-hover hover:text-gray-100"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                          )}
+                          <h2 className="font-semibold text-gray-100 truncate min-w-0">
+                            {column.title}
+                          </h2>
+                        </div>
+                        <label className="relative shrink-0 flex items-center text-gray-400">
+                          <ArrowUpDown className="w-3.5 h-3.5 pointer-events-none absolute left-1.5" />
+                          <select
+                            value={sortKey}
+                            aria-label={`Sort ${column.title}`}
+                            title="Sort list"
+                            onChange={(event) =>
+                              setColumnSort((prev) => ({
+                                ...prev,
+                                [column.id]: event.target.value as SortKey,
+                              }))
+                            }
+                            className="appearance-none pl-6 pr-1.5 py-1 w-[10.5rem] text-[11px] rounded-md bg-background-alt border border-border text-gray-300"
+                          >
+                            {SORT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      {column.id === "blocked" && (
+                        <button
+                          type="button"
+                          disabled={blockedSaving}
+                          onClick={() => {
+                            const count = (column.cards || []).length;
+                            if (count > 0 && !confirmRemoveBlocked) {
+                              setConfirmRemoveBlocked(true);
+                              return;
+                            }
+                            void handleSetBlocked(false);
+                          }}
+                          className="mx-3 mb-2 px-2 py-1 rounded-md border border-white/15 text-left text-xs text-gray-200 hover:bg-border-hover disabled:opacity-50"
+                        >
+                          {confirmRemoveBlocked
+                            ? "Move cards to To Do and remove"
+                            : "Remove Blocked column"}
+                        </button>
+                      )}
+                      <div className="px-3 pb-3 flex flex-col gap-3 overflow-y-auto">
+                        {visibleCards.length === 0 && (
+                          <p className="px-1 text-sm text-gray-400">
+                            No cards yet
+                          </p>
+                        )}
+                        {visibleCards.map((card) => (
+                          <TicketCard
+                            key={card.id}
+                            card={card}
+                            listId={column.id}
+                            labels={boardLabels}
+                            currentUserId={user?.uid}
+                            memberProfiles={memberProfiles}
+                            draggable
+                            onDragStart={(event) =>
+                              handleDragStart(event, card.id)
+                            }
+                            onMove={(nextListId) =>
+                              handleMove(card.id, nextListId)
+                            }
+                            onOpen={() =>
+                              setOpenCard({ card, listId: column.id })
+                            }
+                          />
+                        ))}
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={() => openDraft(column.id)}
-                    className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add a card
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => openDraft(column.id)}
+                        className="mx-3 mb-3 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-border-hover transition"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add a card
+                      </button>
+                    </>
+                  )}
                 </section>
               );
             })}

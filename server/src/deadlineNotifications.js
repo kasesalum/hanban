@@ -1,3 +1,4 @@
+import { pausesNotifications } from "./boardLists.js";
 import { db } from "./firebase.js";
 import { notifyUsers } from "./mailer.js";
 import { NOTIFICATION_TYPES } from "./notifications.js";
@@ -44,7 +45,7 @@ export async function scanDeadlineNotifications() {
     let changed = false;
 
     for (const list of lists) {
-      if (list.id === "done") continue;
+      if (pausesNotifications(list.id)) continue;
 
       for (const card of list.cards || []) {
         const kind = deadlineKind(card.deadline);

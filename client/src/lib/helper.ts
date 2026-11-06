@@ -23,6 +23,8 @@ type UserBoardsResponse = {
   pinned: string[];
 };
 
+export type TicketPriority = "high" | "medium" | "low";
+
 export type UserTicket = {
   id: string;
   title: string;
@@ -30,6 +32,7 @@ export type UserTicket = {
   assignees: string[];
   labels: string[];
   deadline: string;
+  priority?: TicketPriority;
   postponedDays: number;
   listId: string;
   boardId: string;
@@ -319,6 +322,7 @@ export type BoardCardFields = {
   assignees?: string[];
   labels?: string[];
   deadline?: string;
+  priority?: TicketPriority | "";
   actorId?: string;
 };
 
@@ -340,6 +344,7 @@ export async function createBoardCard(
         assignees: fields.assignees || [],
         labels: fields.labels || [],
         deadline: fields.deadline || "",
+        priority: fields.priority || "",
         actorId: fields.actorId || "",
       }),
     });
@@ -521,6 +526,7 @@ export type CardUpdateFields = {
   assignees?: string[];
   labels?: string[];
   deadline?: string;
+  priority?: TicketPriority | "";
   listId?: string;
   actorId?: string;
   descriptionAttachments?: { url: string; path: string }[];

@@ -3,6 +3,7 @@ import {
   listsHaveNestedCards,
   listsPayload,
   normalizeCardLabelIds,
+  parsePriority,
 } from "./boardLists.js";
 import { isVisibleOnBoard } from "./cardArchive.js";
 import { stripCardFeed, stripListsFeed } from "./cardFeed.js";
@@ -29,6 +30,8 @@ export function toStoredCard(card, listId) {
     createdAt: card.createdAt || new Date().toISOString(),
     createdBy: card.createdBy || "",
   };
+  const priority = parsePriority(card.priority);
+  if (priority) stored.priority = priority;
   if (Array.isArray(card.descriptionAttachments)) {
     stored.descriptionAttachments = card.descriptionAttachments;
   }

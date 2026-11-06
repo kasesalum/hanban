@@ -54,6 +54,7 @@ type BoardInfo = {
 };
 
 const EMPTY_COLUMNS: BoardList[] = [
+  { id: "on-hold", title: "On hold", cards: [] },
   { id: "todo", title: "To Do", cards: [] },
   { id: "blocked", title: "Blocked", cards: [] },
   { id: "in-progress", title: "In Progress", cards: [] },
@@ -196,6 +197,7 @@ export default function ArchivePage({
     assignees?: string[];
     labels?: string[];
     deadline?: string;
+    priority?: "high" | "medium" | "low" | "";
   }) => {
     const current = openCardRef.current;
     if (!current) return;
