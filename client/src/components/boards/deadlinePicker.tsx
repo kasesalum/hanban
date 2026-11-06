@@ -1,7 +1,8 @@
 "use client";
 
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 function toISODate(date: Date) {
   const year = date.getFullYear();
@@ -46,6 +47,61 @@ interface DeadlinePickerProps {
   allowClear?: boolean;
 }
 
+type Box = { left: number; right: number; top: number; bottom: number };
+
+const POPUP_WIDTH = 288;
+const POPUP_GAP = 8;
+
+export function calendarPosition({
+  button,
+  popup,
+  bounds,
+  viewport,
+}: {
+  button: Box;
+  popup: { width: number; height: number };
+  bounds: { left: number; right: number } | null;
+  viewport: { width: number; height: number };
+}) {
+  const width = popup.width || POPUP_WIDTH;
+  const height = popup.height;
+  const limitLeft = Math.max(POPUP_GAP, bounds?.left ?? POPUP_GAP);
+  const limitRight = Math.min(
+    viewport.width - POPUP_GAP,
+    (bounds?.right ?? viewport.width) - POPUP_GAP
+  );
+  const limitTop = POPUP_GAP;
+  const limitBottom = viewport.height - POPUP_GAP;
+
+  let left = button.left;
+  if (left + width > limitRight) left = button.right - width;
+  if (left < limitLeft) left = limitLeft;
+  if (left + width > limitRight) {
+    left = Math.max(limitLeft, limitRight - width);
+  }
+
+  let top = button.bottom + POPUP_GAP;
+  if (top + height > limitBottom && button.top - POPUP_GAP - height >= limitTop) {
+    top = button.top - POPUP_GAP - height;
+  }
+  return { top, left };
+}
+
+function columnBounds(node: HTMLElement) {
+  let current = node.parentElement;
+  while (current && current !== document.body) {
+    const style = getComputedStyle(current);
+    const clips = (value: string) =>
+      value === "auto" || value === "scroll" || value === "hidden" || value === "clip";
+    if (clips(style.overflowX) || clips(style.overflowY)) {
+      const rect = current.getBoundingClientRect();
+      return { left: rect.left, right: rect.right };
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
 export default function DeadlinePicker({
   value,
   onChange,
@@ -56,7 +112,12 @@ export default function DeadlinePicker({
   const [cursor, setCursor] = useState(() =>
     value ? parseISO(value) : parseISO(tomorrowISO())
   );
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(
+    null
+  );
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (value) setCursor(parseISO(value));
@@ -64,13 +125,45 @@ export default function DeadlinePicker({
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) {
+        return;
       }
+      setOpen(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPopupPos(null);
+      return;
+    }
+    const place = () => {
+      const button = buttonRef.current;
+      const popup = popupRef.current;
+      if (!button || !popup) return;
+      setPopupPos(
+        calendarPosition({
+          button: button.getBoundingClientRect(),
+          popup: {
+            width: popup.offsetWidth || POPUP_WIDTH,
+            height: popup.offsetHeight,
+          },
+          bounds: columnBounds(button),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+        })
+      );
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, value, allowClear, cursor]);
 
   const days = useMemo(() => {
     const year = cursor.getFullYear();
@@ -111,6 +204,7 @@ export default function DeadlinePicker({
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={
@@ -121,8 +215,17 @@ export default function DeadlinePicker({
         <span>{formatLabel(value)}</span>
         <Calendar className="w-4 h-4 text-gray-400" />
       </button>
-      {open && (
-        <div className="absolute z-30 mt-2 w-72 rounded-lg border border-border bg-background-alt p-3 shadow-xl">
+      {open &&
+        createPortal(
+          <div
+            ref={popupRef}
+            className="fixed z-[200] w-72 rounded-lg border border-border bg-background-alt p-3 shadow-xl"
+            style={{
+              top: popupPos?.top ?? 0,
+              left: popupPos?.left ?? 0,
+              visibility: popupPos ? "visible" : "hidden",
+            }}
+          >
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"
@@ -187,8 +290,9 @@ export default function DeadlinePicker({
               Remove due date
             </button>
           )}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -744,7 +744,7 @@ export default function CardDetailModal({
                   }}
                   className="px-2.5 py-1.5 rounded-md border border-border bg-background-alt text-sm text-gray-100"
                 >
-                  <option value="">None</option>
+                  <option value="">Not set</option>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
@@ -766,11 +766,7 @@ export default function CardDetailModal({
                         : "border-border bg-background-alt text-gray-100"
                     }`}
                   />
-                  {overdue && (
-                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-red-500 text-red-400 bg-red-500/15">
-                      Overdue
-                    </span>
-                  )}
+                
                 </div>
               </div>
 
