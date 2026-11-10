@@ -25,7 +25,7 @@ The in-app inbox is always written when a notification fires. Email is sent only
 | Assigned to a card | Someone is added as an assignee on an open card | The new assignee |
 | Comment on your cards | A comment is added on an open card | Assignees |
 | Due date changes | The due date is set, changed, or cleared on an open card | Assignees |
-| Deadline approaching | A scanner runs every 15 minutes; due date is today or tomorrow | Assignees |
+| Deadline approaching | A scanner runs about once an hour; due date is today or tomorrow | Assignees |
 | Deadline overdue | Same scanner; due date is in the past | Assignees |
 | Added to a board | A member is added to a board | The new member |
 

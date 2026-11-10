@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   ARCHIVE_AFTER_MS,
   applyDoneTransition,
+  backfillCompletedAt,
   cancelCard,
   isArchiveDue,
   isVisibleOnBoard,
+  needsCompletedAtBackfill,
   restoreCard,
   shouldShowInDone,
 } from "./cardArchive.js";
@@ -106,6 +108,44 @@ describe("restoreCard", () => {
     assert.equal(next.cancelled, undefined);
     assert.equal(next.cancelledAt, undefined);
     assert.equal(next.completedAt, now.toISOString());
+  });
+});
+
+describe("needsCompletedAtBackfill", () => {
+  it("is only for Done cards that have no completion time", () => {
+    assert.equal(
+      needsCompletedAtBackfill({ id: "c1", listId: "done" }),
+      true
+    );
+    assert.equal(
+      needsCompletedAtBackfill({
+        id: "c1",
+        listId: "done",
+        completedAt: "2026-10-01T00:00:00.000Z",
+      }),
+      false
+    );
+    assert.equal(
+      needsCompletedAtBackfill({ id: "c1", listId: "todo" }),
+      false
+    );
+    assert.equal(
+      needsCompletedAtBackfill({
+        id: "c1",
+        listId: "done",
+        cancelled: true,
+      }),
+      false
+    );
+  });
+
+  it("leaves a card alone once it has completedAt", () => {
+    const card = {
+      id: "c1",
+      listId: "done",
+      completedAt: "2026-10-01T00:00:00.000Z",
+    };
+    assert.equal(backfillCompletedAt(card), card);
   });
 });
 

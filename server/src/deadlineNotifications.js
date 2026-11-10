@@ -1,14 +1,7 @@
 import { pausesNotifications } from "./boardLists.js";
-import { db } from "./firebase.js";
 import { notifyUsers } from "./mailer.js";
 import { NOTIFICATION_TYPES } from "./notifications.js";
-import {
-  loadAssembledLists,
-  saveBoardLists,
-  writeCardDoc,
-} from "./cardStore.js";
-
-const INTERVAL_MS = 15 * 60 * 1000;
+import { saveBoardLists, writeCardDoc } from "./cardStore.js";
 
 function toISODate(date) {
   const year = date.getFullYear();
@@ -36,58 +29,40 @@ function deadlineKind(deadline) {
   return null;
 }
 
-export async function scanDeadlineNotifications() {
-  const snap = await db.collection("Boards").get();
+export async function notifyAssembledBoard(boardRef, boardId, data, lists) {
+  let changed = false;
 
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const lists = await loadAssembledLists(doc.id, data);
-    let changed = false;
+  for (const list of lists) {
+    if (pausesNotifications(list.id)) continue;
 
-    for (const list of lists) {
-      if (pausesNotifications(list.id)) continue;
+    for (const card of list.cards || []) {
+      const kind = deadlineKind(card.deadline);
+      if (!kind) continue;
+      if (!(card.assignees || []).length) continue;
 
-      for (const card of list.cards || []) {
-        const kind = deadlineKind(card.deadline);
-        if (!kind) continue;
-        if (!(card.assignees || []).length) continue;
+      const flag =
+        kind === "approaching" ? "notifiedApproaching" : "notifiedOverdue";
+      if (card[flag]) continue;
 
-        const flag =
-          kind === "approaching" ? "notifiedApproaching" : "notifiedOverdue";
-        if (card[flag]) continue;
+      await notifyUsers({
+        type:
+          kind === "approaching"
+            ? NOTIFICATION_TYPES.deadlineApproaching
+            : NOTIFICATION_TYPES.deadlineOverdue,
+        userIds: card.assignees || [],
+        boardId,
+        boardName: data.name || "Untitled board",
+        urlName: data.urlName,
+        card,
+      });
 
-        await notifyUsers({
-          type:
-            kind === "approaching"
-              ? NOTIFICATION_TYPES.deadlineApproaching
-              : NOTIFICATION_TYPES.deadlineOverdue,
-          userIds: card.assignees || [],
-          boardId: doc.id,
-          boardName: data.name || "Untitled board",
-          urlName: data.urlName,
-          card,
-        });
-
-        card[flag] = true;
-        await writeCardDoc(doc.id, card, list.id);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      await saveBoardLists(doc.ref, lists, data);
+      card[flag] = true;
+      await writeCardDoc(boardId, card, list.id);
+      changed = true;
     }
   }
-}
 
-export function startDeadlineNotifications() {
-  scanDeadlineNotifications().catch((error) => {
-    console.error("Error scanning deadline notifications:", error);
-  });
-
-  setInterval(() => {
-    scanDeadlineNotifications().catch((error) => {
-      console.error("Error scanning deadline notifications:", error);
-    });
-  }, INTERVAL_MS);
+  if (changed) {
+    await saveBoardLists(boardRef, lists, data);
+  }
 }

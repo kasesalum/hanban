@@ -1019,7 +1019,11 @@ router.get("/:id", async (req, res) => {
   try {
     const boardId = req.params.id;
     if (boardId === FEATURE_BOARD_ID && req.query.userId) {
-      await ensureFeatureBoardMember(String(req.query.userId));
+      try {
+        await ensureFeatureBoardMember(String(req.query.userId));
+      } catch (error) {
+        console.error("Error ensuring feature board membership:", error);
+      }
     }
 
     const boardRef = db.collection("Boards").doc(boardId);

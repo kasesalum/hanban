@@ -1,13 +1,11 @@
-import { db } from "./firebase.js";
 import {
   backfillCompletedAt,
   isArchiveDue,
   markArchived,
+  needsCompletedAtBackfill,
 } from "./cardArchive.js";
 import { activityCol } from "./cardFeed.js";
 import { loadCardDocs, writeCardDoc } from "./cardStore.js";
-
-const INTERVAL_MS = 15 * 60 * 1000;
 
 async function latestCompleteTimes(boardId) {
   try {
@@ -30,7 +28,10 @@ async function latestCompleteTimes(boardId) {
 
 export async function prepareCardDocs(boardId, { persist = true } = {}) {
   const cards = await loadCardDocs(boardId);
-  const completes = persist ? await latestCompleteTimes(boardId) : new Map();
+  const completes =
+    persist && cards.some(needsCompletedAtBackfill)
+      ? await latestCompleteTimes(boardId)
+      : new Map();
   const now = new Date();
   const next = [];
   const writes = [];
@@ -53,23 +54,4 @@ export async function prepareCardDocs(boardId, { persist = true } = {}) {
 
   if (writes.length) await Promise.all(writes);
   return next;
-}
-
-export async function scanCardArchives() {
-  const snap = await db.collection("Boards").get();
-  for (const doc of snap.docs) {
-    await prepareCardDocs(doc.id, { persist: true });
-  }
-}
-
-export function startCardArchives() {
-  scanCardArchives().catch((error) => {
-    console.error("Error scanning card archives:", error);
-  });
-
-  setInterval(() => {
-    scanCardArchives().catch((error) => {
-      console.error("Error scanning card archives:", error);
-    });
-  }, INTERVAL_MS);
 }

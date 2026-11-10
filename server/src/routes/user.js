@@ -51,7 +51,11 @@ router.get("/boards", async (req, res) => {
     const userSnap = await userRef.get();
     const pinned = userSnap.exists ? userSnap.data().PinnedBoards || [] : [];
 
-    await ensureFeatureBoardMember(userId);
+    try {
+      await ensureFeatureBoardMember(userId);
+    } catch (error) {
+      console.error("Error ensuring feature board membership:", error);
+    }
 
     const boardsSnap = await db
       .collection("Boards")
@@ -88,7 +92,11 @@ router.get("/tickets", async (req, res) => {
       return res.status(400).json({ error: "Missing userId" });
     }
 
-    await ensureFeatureBoardMember(userId);
+    try {
+      await ensureFeatureBoardMember(userId);
+    } catch (error) {
+      console.error("Error ensuring feature board membership:", error);
+    }
 
     const boardsSnap = await db
       .collection("Boards")

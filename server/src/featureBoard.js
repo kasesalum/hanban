@@ -77,6 +77,15 @@ export async function ensureFeatureBoardMember(userId) {
   if (!userId) return null;
 
   const boardRef = db.collection("Boards").doc(FEATURE_BOARD_ID);
+  const existing = await boardRef.get();
+  if (existing.exists) {
+    const data = existing.data() || {};
+    const members = data.members || [];
+    if (members.includes(userId) && String(data.info || "").trim()) {
+      return { id: FEATURE_BOARD_ID, members };
+    }
+  }
+
   let created = false;
   let joined = false;
   let members = [];
@@ -114,7 +123,7 @@ export async function ensureFeatureBoardMember(userId) {
     if (Object.keys(updates).length > 0) {
       tx.update(boardRef, updates);
     }
-  });
+  }, { maxAttempts: 2 });
 
   if (created) {
     await indexFeatureBoard(members, createdAt);

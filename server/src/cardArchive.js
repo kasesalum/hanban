@@ -73,9 +73,14 @@ export function markArchived(card, now = new Date()) {
   };
 }
 
+export function needsCompletedAtBackfill(card) {
+  if (!card || card.cancelled) return false;
+  if ((card.listId || "") !== "done") return false;
+  return !card.completedAt;
+}
+
 export function backfillCompletedAt(card, completeTimes = new Map(), now = new Date()) {
-  if (card?.cancelled) return card;
-  if ((card.listId || "") !== "done" || card.completedAt) return card;
+  if (!needsCompletedAtBackfill(card)) return card;
   return {
     ...card,
     completedAt:
